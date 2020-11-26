@@ -30,6 +30,8 @@ cmake -DWITH_PYTORCH=True -DPYTORCH_PATH=/path/to/libtorch/ ..;
 make
 ```
 
+**Possible issue** 
+
 In libTorch, it uses keyword signatures to link libraries while in FindCUDA.cmake it uses plain library linking. 
 This may cause issues when building this project. You may need to change the target_link_libraries in FindCUDA.cmake to
 signature-based linking.
@@ -56,24 +58,24 @@ Our system assumes floor-aligned reconstruction. We use a simple floor detection
 Our dataset is built based on [ScanNet][scannet], [Scan2CAD][scan2cad] and [ShapeNetCore.v2][shapenet]. You will need
 to download the dataset from them first in order to build CompleteScanNet.
 
-You will need to download the `*_vh_clean_2.labels.ply` meshes.
+You will need to download the `*_vh_clean_2.labels.ply` and `*.sens` files.
 
 [scannet]:https://github.com/ScanNet/ScanNet
 [scan2cad]:https://github.com/skanti/Scan2CAD
 [shapenet]:https://www.shapenet.org/
 
-
 #### Ground Truth Generation
-##### Flip Clouds
+**Flip Clouds**
+
 Our system uses a different coordinate system than ScanNet. The input ply files must be flipped in order to correctly 
 align it to our system.
 
 It's also possible to use the original ScanNet coordinate system, but you will need to change 
 some codes accordingly. We are working on that. 
 ```
-# Need to change the paths inside first
+# Flip mesh
 cd scripts
-bash RUN_FLIP_SCANNET_MESH.sh 
+bash RUN_FLIP_SCANNET_MESH.sh # Need to change the paths inside  
 
 # Generate aligned poses
 cd ../build/App/extractPoseFromScanNet;
