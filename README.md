@@ -12,8 +12,50 @@ This is an implementation of our [SCFusion](https://arxiv.org/abs/2010.13662) on
 
 
 ## Dependencies
-CMake, CUDA, OpenCV 4.x, Eigen3, PCL, assimp (for data generation).
+####CMAKE
+`pip3 install cmake`
 
+if no pip3, `apt install python3-pip`
+
+#### Eigen3
+```
+git clone https://github.com/eigenteam/eigen-git-mirror.git
+cd eigen-git-mirror; mkdir build;cd build;cmake ..; sudo make install
+```
+#### PCL
+`sudo apt install libpcl-dev`
+
+#### OpenCV
+```
+git clone https://github.com/opencv/opencv.git
+cd opencv; mkdir build; cd build;
+cmake ..; make; make install
+```
+
+
+#### glfw3 (if with GUI)
+```
+apt-get update
+apt-get install libglfw3
+apt-get install libglfw3-dev
+```
+
+#### Assimp (if with data generator)
+```
+apt-get install libassimp-dev assimp-utils
+```
+#### TooN (if with data generator)
+```
+git clone https://github.com/edrosten/TooN.git;
+cd TooN;
+./configure && make && sudo make install
+```
+
+#### CUDA
+Please follow the instruction on NVIDIA offical site.
+assimp (for data generation).
+
+#### libTorch
 libTorch : You can download the pre-built version from Pytorch [website](https://pytorch.org/get-started/locally/)
 or build it from [source](https://github.com/pytorch/pytorch#from-source)
 

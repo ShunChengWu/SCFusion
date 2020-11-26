@@ -2,7 +2,7 @@ include(${PROJECT_SOURCE_DIR}/cmake/cmake_macro_addExternalProject/macro.cmake)
 
 addExternalProjectGit (
 	cxxtools
-	git@github.com:ShunChengWu/CxxTools.git
+	https://github.com/ShunChengWu/CxxTools.git
 	cxxtools_DIR
 )
 

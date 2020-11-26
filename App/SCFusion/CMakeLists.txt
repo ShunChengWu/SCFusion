@@ -1,7 +1,6 @@
 ###############################################################################
 ### -- 3rd party
 INCLUDE(UseCUDA)
-INCLUDE(UseFreetype)
 find_package(PCL 1.7 REQUIRED)
 INCLUDE(UseEigen3)
 ###########################################################################################
@@ -56,6 +55,7 @@ ENDFOREACH()
 # SCFUSION_INFINITAM_GUI #
 ########################
 IF(WITH_GUI)
+	INCLUDE(UseFreetype)
 	SET(basetargetname exe_scfusion_gui)
 	SET(sources main_gui_infinitam.cpp)
 	SET(headers)
