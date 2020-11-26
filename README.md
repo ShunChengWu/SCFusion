@@ -66,7 +66,7 @@ You will need to download the `*_vh_clean_2.labels.ply` meshes.
 [shapenet]:https://www.shapenet.org/
 
 
-### Ground Truth Generation
+#### Ground Truth Generation
 ##### Flip Clouds
 Our system uses a different coordinate system than ScanNet. The input ply files must be flipped in order to correctly 
 align it to our system.
@@ -99,7 +99,7 @@ replace `--fill 1` to `--fill 0` if you want to generate not filled ground truth
  --labelNum 12
 ```
 
-##### Generate Training data
+#### Generate Training data
 ```
 cd scripts
 # Need to change paths
