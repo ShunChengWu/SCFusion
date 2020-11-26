@@ -1,0 +1,204 @@
+#pragma once
+
+#include <ORUtils/MemoryBlock.h>
+#include "../Interface/ConnectedComponent.h"
+#include "../Shared/ConnectedComponent_shared.h"
+#include <map>
+
+#include <ORUtils/Image.h>
+
+namespace SCFUSION{
+    class ConnectedComponent_CUDA : public ConnectedComponent {
+    public:
+        explicit ConnectedComponent_CUDA(size_t size=1):ConnectedComponent(size,MEMORYDEVICE_CUDA){}
+
+        void process(ORUtils::Image<bool> *image, ORUtils::Image<uint> *output) override{
+            labelling(image);
+            reLabelling(output->GetData(MEMORYDEVICE_CUDA), &output->noDims.toUInt()[0], 2, 0);
+        }
+
+
+        void process(bool *input, uint *output, const uint *input_dims_data, const uint *block_dims_data, const uint dims) override {
+            labelling_block(input, input_dims_data, block_dims_data, dims);
+            reLabelling(output, input_dims_data, dims, 0);
+        }
+    private:
+        void labelling(const ORUtils::Image<bool> *image)
+        {
+            djset->Resize(image->dataSize);
+
+            const auto &height = image->noDims.height;
+            const auto &width = image->noDims.width;
+            const auto *data_cpu = image->GetData(MEMORYDEVICE_CUDA);
+
+            for (int y = 0; y<height; y++){
+                for (int x = 0; x<width; x++){
+                    int x_ = x;
+                    int y_ = y;
+
+                    int index = y_*width + x_;
+
+                    // check conectivity on horizontal pixel
+                    x_ -= 1;
+                    if(x_ >= 0) {
+                        int leftIndex = y_ * width + x_;
+                        if (data_cpu[leftIndex] == data_cpu[index]) {
+                            djset->unionSet(index, leftIndex);
+                        }
+                    }
+
+                    // check conectivity on vertical pixel
+                    y_ -= 1; x_ = x;
+                    if(y_ >= 0) {
+                        int upIndex = y_ * width + x_;
+                        if (data_cpu[upIndex] == data_cpu[index]) {
+                            djset->unionSet(index, upIndex);
+                        }
+                    }
+
+                }
+            }
+        }
+
+        template<class T>
+        static void labelling_kernel(uint dims, uint *offset, const uint *threadDims, const uint *imgDims,
+                                     const T *data, DisjointSet *djset){
+            uint idx, idx_of;
+            ORUtils::MemoryBlock<uint> iters(dims, MEMORYDEVICE_CUDA);
+            ORUtils::MemoryBlock<uint> upLimit(dims, MEMORYDEVICE_CUDA);
+            auto iters_data = iters.GetData(MEMORYDEVICE_CUDA);
+            auto uplimits_data = upLimit.GetData(MEMORYDEVICE_CUDA);
+            memcpy(iters_data, offset, sizeof(uint) * dims);
+            for(size_t i=0;i<dims;++i) {
+                iters_data[i] = offset[i];
+                uplimits_data[i] = offset[i]+threadDims[i];
+            }
+
+            bool bContinue;
+            do {
+                bContinue = false;
+                for(uint i=0;i<dims;++i) if(iters_data[i]>=imgDims[i]) {
+                        bContinue=true;
+                        break;
+                    }
+                if(bContinue) continue;
+
+                idx = calculateIdx(imgDims, iters_data, dims);
+
+                for(uint i=0; i<dims;++i){
+                    if(iters_data[i] > offset[i]) {
+                        iters_data[i] -= 1;
+                        idx_of = calculateIdx(imgDims, iters_data, dims);
+                        if (data[idx_of] == data[idx]) djset->unionSet(idx, idx_of);
+                        iters_data[i] += 1;
+                    }
+                }
+            } while (recursiveDynamicLoop(iters_data, offset, uplimits_data, dims-1));
+        }
+
+        template<class Tin>
+        void labelling_block(Tin *img, const uint *img_dims_data, const uint *block_dims_data, const uint dims) {
+            size_t imgSize = 1;
+            for(size_t i=0;i<dims;++i) imgSize *= img_dims_data[i];
+            djset->Resize(imgSize);
+
+            ORUtils::MemoryBlock<uint> offset(dims, MEMORYDEVICE_CPU);
+            auto offset_data = offset.GetData(MEMORYDEVICE_CPU);
+
+            /// Block Ops
+            ORUtils::MemoryBlock<uint> noBlock(dims,MEMORYDEVICE_CPU);
+            auto noBlock_data = noBlock.GetData(MEMORYDEVICE_CPU);
+            for(size_t i=0;i<dims;++i)
+                noBlock_data[i] = (img_dims_data[i] + block_dims_data[i]-1) / block_dims_data[i];
+
+            ORUtils::MemoryBlock<uint> lowLimit (dims, MEMORYDEVICE_CPU);
+            ORUtils::MemoryBlock<uint> iters (dims, MEMORYDEVICE_CPU);
+            lowLimit.Clear(0);
+            iters.Clear(0);
+            auto lowLimit_data = lowLimit.GetData(MEMORYDEVICE_CPU);
+            auto iters_data = iters.GetData(MEMORYDEVICE_CPU);
+
+            /// each block is totally isolated
+            do {
+                for(size_t i=0;i<dims;++i) offset_data[i] = iters_data[i] * block_dims_data[i];
+                labelling_kernel(dims, offset_data, block_dims_data, img_dims_data,
+                                 img, djset.get());
+            } while (recursiveDynamicLoop(iters_data, lowLimit_data, noBlock_data, dims-1));
+
+            /// Merging
+            auto linearOp = [] (Tin* img, DisjointSet *djset_, uint *offset_data, uint* blockSize, int targetDim, const uint *block_dims_data, const uint *noBlock_data, int dims, const uint *img_dims_data){
+                blockSize[targetDim] = 2;
+                for (uint x = 1; x < noBlock_data[targetDim]; ++x) {
+                    offset_data[targetDim] = x * block_dims_data[targetDim] - 1;
+                    labelling_kernel(dims, offset_data, blockSize, img_dims_data,
+                                     img, djset_);
+                }
+                blockSize[targetDim] = img_dims_data[targetDim];
+                offset_data[targetDim] = 0;
+            };
+
+#if 1
+            ORUtils::MemoryBlock<uint>mergingBlockSizes(dims, MEMORYDEVICE_CPU);
+            auto mergingBlockSizes_data = mergingBlockSizes.GetData(MEMORYDEVICE_CPU);
+            for(size_t i=0;i<dims;++i) mergingBlockSizes_data[i] = block_dims_data[i];
+            int target_dim = dims;
+            /// the target dim-block is sequential
+            do {
+                if(target_dim-2 < 0) break;
+                iters.SetFrom(&lowLimit, ORUtils::MemoryBlock<uint>::CPU_TO_CPU);
+                do {
+                    for(int i=0;i<target_dim-1;++i) offset_data[i] = iters_data[i] * block_dims_data[i];
+                    linearOp(img, djset.get(), offset_data, mergingBlockSizes_data, target_dim - 1, block_dims_data, noBlock_data, dims, img_dims_data);
+                } while (recursiveDynamicLoop(iters_data, lowLimit_data, noBlock_data, target_dim-2));
+                mergingBlockSizes_data[target_dim - 1] = img_dims_data[target_dim - 1];
+                target_dim -= 1;
+            } while (target_dim>0);
+
+            iters.SetFrom(&lowLimit, ORUtils::MemoryBlock<uint>::CPU_TO_CPU);
+            linearOp(img, djset.get(), offset_data, mergingBlockSizes_data, 0, block_dims_data, noBlock_data, dims, img_dims_data);
+#else
+            // horizontal
+        int targetD = 0;
+        ORUtils::Vector2<uint> threads_h = {block_dims_data[0], block_dims_data[1]};
+        for (uint y = 0; y < noBlock_data[1]; ++y) {
+            offset_data[1] = y * block_dims_data[1];
+            linearOp(targetD, offset_data, block_dims_data, noBlock_data, dims, &threads_h[0], img_dims_data, img, &djset);
+        }
+        // vertical
+        targetD = 1;
+        linearOp(targetD, offset_data,block_dims_data,noBlock_data,dims,&threads_h[0], img_dims_data, img, &djset);
+#endif
+        }
+
+        int reLabelling(uint *labelData, const uint *label_dim_data, const uint dims, int minRegionThresh)
+        {
+            ORUtils::MemoryBlock<uint> iters(dims,MEMORYDEVICE_CPU);
+            ORUtils::MemoryBlock<uint> lowLimit(dims,MEMORYDEVICE_CPU);
+            auto iters_data = iters.GetData(MEMORYDEVICE_CPU);
+            auto lowLimit_data = lowLimit.GetData(MEMORYDEVICE_CPU);
+
+            iters.Clear(0);
+            lowLimit.Clear(0);
+
+            int n = 0;
+            std::map<ushort, ushort> labelContainer;
+            do{
+//            for(size_t t=0;t<dims;++t) printf("[%zu] iters: %d\n", t, iters_data[t]);
+
+                int index = calculateIdx(label_dim_data, iters_data, dims);
+//            int index = y*width + x;
+                int label = djset->find(index);
+
+                if (djset->getSize(index) < minRegionThresh){
+                    djset->unionSet(label, 0);
+                    labelData[index] = 0;
+                    continue;
+                }
+
+                if (labelContainer.count(label) == 0) labelContainer[label] = ++n;
+                labelData[index] = labelContainer[label];
+            } while(recursiveDynamicLoop(iters_data,lowLimit_data,label_dim_data, dims-1));
+            return djset->getRootNum();
+        }
+    };
+}

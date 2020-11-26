@@ -1,0 +1,174 @@
+#include "PointCloudExtractionEngine_CUDA.h"
+#include "../../../../ORUtils/CUDADefines.h"
+#include "../../../Utils/ITMCUDAUtils.h"
+#include "../Shared/PointCloudExtraction_Shared.h"
+#include <thrust/device_vector.h>
+#include <thrust/scan.h>
+
+using namespace SCFUSION;
+namespace {
+    __global__ void pcFindAllocateBlocks(Vector4s *visibleBlockPos, const ITMHashEntry *hashTable, int noTotalEntries, Vector3s blockDims)
+    {
+        int entryId = threadIdx.x + blockIdx.x * blockDim.x;
+        if (entryId > noTotalEntries - 1) return;
+
+        const ITMHashEntry &currentHashEntry = hashTable[entryId];
+
+        if (currentHashEntry.ptr >= 0){
+            short totalSize = blockDims.x*blockDims.y*blockDims.z;
+            for(short z=0;z<blockDims.z;++z){
+                for(short y=0;y<blockDims.y;++y){
+                    for(short x=0;x<blockDims.x;++x){
+                        visibleBlockPos[currentHashEntry.ptr*totalSize + (z*blockDims.y+y)*blockDims.x+x]
+                                = Vector4s(currentHashEntry.pos.x * blockDims.x + x,
+                                           currentHashEntry.pos.y * blockDims.y + y, currentHashEntry.pos.z * blockDims.z + z, 1);
+                    }
+                }
+            }
+        }
+    }
+
+    template <SCFUSION::IntegrateType T, class TVoxel>
+    __global__ void classifyVoxel_kernel(int size, uint *voxelOccupied,
+                                         const Vector4s *visibleBlockGlobalPos, const TVoxel *localVBA, const ITMHashEntry *hashTable) {
+        CUDA_1D_LOOP(i, size) {
+            classifyVoxel_shared<T, TVoxel>(i,voxelOccupied, visibleBlockGlobalPos, localVBA, hashTable);
+        }
+    }
+
+
+    __global__ void
+    pcCompactVoxels_kernel(uint *compactedVoxelArray, uint *voxelOccupied, uint *voxelOccupiedScan, int size) {
+        CUDA_1D_LOOP(i, size) {
+            pcCompactVoxels(i, compactedVoxelArray, voxelOccupied, voxelOccupiedScan, size);
+        }
+    }
+
+
+
+    template<class TVoxel>
+    __global__ void CopyValueToFloat(float *output,Vector3i origin, Vector3s dims,
+                                     const Vector4s *visibleBlockGlobalPos, const TVoxel *localVBA, const ITMHashEntry *hashTable)
+    {
+        const Vector4s globalPos_4s = visibleBlockGlobalPos[blockIdx.x + gridDim.x * blockIdx.y];
+        if (globalPos_4s.w == 0) return;
+        Vector3i globalPos = Vector3i(globalPos_4s.x, globalPos_4s.y, globalPos_4s.z) * SDF_BLOCK_SIZE;
+
+        Vector3i blockLocation = globalPos + Vector3i(threadIdx.x, threadIdx.y, threadIdx.z);
+
+        Vector3i correspondingIndex = blockLocation - origin * SDF_BLOCK_SIZE;
+        size_t idx = (correspondingIndex.z * dims.y + correspondingIndex.y) *dims.x + correspondingIndex.x;
+
+        int vmIndex;
+        output[idx] = TVoxel::valueToFloat(readVoxel(localVBA, hashTable, globalPos + Vector3i(threadIdx.x, threadIdx.y, threadIdx.z), vmIndex).sdf);
+    }
+
+    template <SCFUSION::IntegrateType integrateType, SCFUSION::Policy::Integrate  TIntegratePolicy, class TVoxel>
+    __global__ void generatePoints_device(uint size, Vector4f *points, Vector4f *colors,
+                                          uint *compactedVoxelArray, const Vector4s *visibleBlockGlobalPos, const TVoxel *localVBA, const ITMHashEntry *hashTable, float factor) {
+        CUDA_1D_LOOP(i, size) {
+            generatePoints_shared<integrateType, TIntegratePolicy,TVoxel>(i,points,colors,compactedVoxelArray,visibleBlockGlobalPos,localVBA,hashTable,factor);
+        }
+    }
+}
+
+
+
+template<class TVoxel>
+PointCloudExtractionEngine_CUDA<TVoxel, ITMLib::ITMVoxelBlockHash>::PointCloudExtractionEngine_CUDA()
+    {
+        visibleBlockGlobalPos.reset(new ORUtils::MemoryBlock<Vector4s>(visibleBlockPos_size, false, true));
+        stream_ = nullptr;
+        voxelOccupied_.reset(new ORUtils::MemoryBlock<uint>(visibleBlockPos_size, false, true));
+        voxelOccupiedScan_.reset(new ORUtils::MemoryBlock<uint>(visibleBlockPos_size, false, true));
+        voxelOccupied_->Clear(0, true, stream_);
+        voxelOccupiedScan_->Clear(0, true, stream_);
+    }
+
+template<class TVoxel>
+void PointCloudExtractionEngine_CUDA<TVoxel, ITMLib::ITMVoxelBlockHash>::ExtractPointCloud(SCFUSION::PointCloud *pointcloud, const ITMLib::ITMScene<TVoxel,ITMLib::ITMVoxelBlockHash> *scene){
+    int noMaxPoints = pointcloud->noMaxPoints, noTotalEntries = scene->index->noTotalEntries;
+    const TVoxel *localVBA = scene->localVBA->GetVoxelBlocks();
+    const ITMHashEntry *hashTable = scene->index->GetEntries();
+    float factor = scene->sceneParams->voxelSize;
+    auto pointcloud_device = pointcloud->points->GetData(MEMORYDEVICE_CUDA);
+    auto pointcolor_device = pointcloud->colors->GetData(MEMORYDEVICE_CUDA);
+
+    uint *voxelOccupied_data = voxelOccupied_->GetData(MEMORYDEVICE_CUDA);
+    uint *voxelOccupiedScan_data = voxelOccupiedScan_->GetData(MEMORYDEVICE_CUDA);
+    auto visibleBlockGlobalPos_device = visibleBlockGlobalPos->GetData(MEMORYDEVICE_CUDA);
+
+    visibleBlockGlobalPos->Clear(0, true, stream_);
+
+
+    //TODO: use my own version of marching cubes. count the number of points first.
+
+    /// identify used voxel blocks
+    {
+        // loop through all has entries: use noTotalEntries
+        pcFindAllocateBlocks<<<GET_1D_BLOCKS(noTotalEntries), threadPerBlock, 0, stream_>>>
+           (visibleBlockGlobalPos_device, hashTable, noTotalEntries, Vector3s(SDF_BLOCK_SIZE,SDF_BLOCK_SIZE,SDF_BLOCK_SIZE));
+        ORcudaKernelCheck;
+    }
+
+    /// Classify Voxel
+    {
+        // loop through all visibleBlockGlobalPos_device: use visibleBlockPos_size
+        classifyVoxel_kernel<TVoxel::integrateType,TVoxel> <<< GET_1D_BLOCKS(visibleBlockPos_size), threadPerBlock, 0, stream_ >>>
+            (visibleBlockPos_size, voxelOccupied_data, visibleBlockGlobalPos_device, localVBA, hashTable);
+    }
+
+    cudaStreamSynchronize(stream_);
+
+    /// Occupied Scan
+    uint activeVoxels;
+    {
+        thrust::exclusive_scan(thrust::device_ptr<unsigned int>(voxelOccupied_data),
+                               thrust::device_ptr<unsigned int>(voxelOccupied_data + visibleBlockPos_size),
+                               thrust::device_ptr<unsigned int>(voxelOccupiedScan_data)
+        );
+
+        {
+            uint lastElement, lastScanElement;
+            ORcudaSafeCall(cudaMemcpyAsync((void *) &lastElement,
+                                           (void *)(voxelOccupied_data + visibleBlockPos_size-1),
+                                           sizeof(uint), cudaMemcpyDeviceToHost, stream_));
+            ORcudaSafeCall(cudaMemcpyAsync((void *) &lastScanElement,
+                                           (void *)(voxelOccupiedScan_data + visibleBlockPos_size-1),
+                                           sizeof(uint), cudaMemcpyDeviceToHost, stream_));
+            ORcudaSafeCall(cudaStreamSynchronize(stream_));
+
+            activeVoxels = lastElement + lastScanElement;
+        }
+        if(activeVoxels==0) return;
+        if(compactedVoxelArray_ == nullptr) compactedVoxelArray_.reset(new ORUtils::MemoryBlock<uint>(activeVoxels, false, true));
+        else compactedVoxelArray_->Resize(activeVoxels);
+    }
+
+    /// Generate Compact Array
+    auto compactedVoxelArray_data = compactedVoxelArray_->GetData(MEMORYDEVICE_CUDA);
+    {
+        pcCompactVoxels_kernel << < GET_1D_BLOCKS(visibleBlockPos_size, threadPerBlock), threadPerBlock, 0, stream_ >>>
+          (
+                  compactedVoxelArray_data, voxelOccupied_data, voxelOccupiedScan_data, visibleBlockPos_size
+          );
+        ORcudaSafeCall(cudaStreamSynchronize(stream_));
+    }
+
+    /// Copy Memory
+    {
+        switch (scene->sceneParams->integratePolicy){
+            case SCFUSION::Policy::Integrate_DIRECT:
+                generatePoints_device<TVoxel::integrateType, SCFUSION::Policy::Integrate_DIRECT,TVoxel><<<GET_1D_BLOCKS(activeVoxels, threadPerBlock), threadPerBlock>>>
+                     (activeVoxels,pointcloud_device, pointcolor_device,compactedVoxelArray_data,visibleBlockGlobalPos_device,localVBA,hashTable,factor);
+                break;
+            case SCFUSION::Policy::Integrate_WEIGHTED:
+                generatePoints_device<TVoxel::integrateType, SCFUSION::Policy::Integrate_WEIGHTED,TVoxel><<<GET_1D_BLOCKS(activeVoxels, threadPerBlock), threadPerBlock>>>
+                   (activeVoxels,pointcloud_device, pointcolor_device,compactedVoxelArray_data,visibleBlockGlobalPos_device,localVBA,hashTable,factor);
+                break;
+        }
+        ORcudaSafeCall(cudaStreamSynchronize(stream_));
+    }
+
+    pointcloud->noTotalPoints = std::min<uint>(activeVoxels, static_cast<uint>(noMaxPoints));
+}

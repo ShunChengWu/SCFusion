@@ -1,0 +1,744 @@
+// Copyright 2014-2017 Oxford University Innovation Limited and the authors of InfiniTAM
+
+#include "ITMMeshingEngine_CUDA.h"
+
+#include <thrust/device_vector.h>
+#include <thrust/scan.h>
+
+#include <algorithm>
+#include "../Shared/ITMMeshingEngine_Shared.h"
+#include "../../../Utils/ITMCUDAUtils.h"
+#include "../../../../ORUtils/CUDADefines.h"
+
+#include "mattdean1/scan.h"
+
+using namespace ITMLib;
+
+
+namespace {
+    template<int dummy>
+    __global__ void findAllocateBlocks(Vector4s *visibleBlockGlobalPos, const ITMHashEntry *hashTable, int noTotalEntries)
+    {
+        int entryId = threadIdx.x + blockIdx.x * blockDim.x;
+        if (entryId > noTotalEntries - 1) return;
+
+        const ITMHashEntry &currentHashEntry = hashTable[entryId];
+
+        if (currentHashEntry.ptr >= 0)
+            visibleBlockGlobalPos[currentHashEntry.ptr] = Vector4s(currentHashEntry.pos.x, currentHashEntry.pos.y, currentHashEntry.pos.z, 1);
+    }
+
+    template<int dummy>
+    __global__ void findAllocateBlocks(Vector4s *visibleBlockPos, const ITMHashEntry *hashTable, int noTotalEntries, Vector3s blockDims)
+    {
+        int entryId = threadIdx.x + blockIdx.x * blockDim.x;
+        if (entryId > noTotalEntries - 1) return;
+
+        const ITMHashEntry &currentHashEntry = hashTable[entryId];
+
+        if (currentHashEntry.ptr >= 0){
+            short totalSize = blockDims.x*blockDims.y*blockDims.z;
+            for(short z=0;z<blockDims.z;++z){
+                for(short y=0;y<blockDims.y;++y){
+                    for(short x=0;x<blockDims.x;++x){
+                        visibleBlockPos[currentHashEntry.ptr*totalSize + (z*blockDims.y+y)*blockDims.x+x]
+                                = Vector4s(currentHashEntry.pos.x * blockDims.x + x,
+                                           currentHashEntry.pos.y * blockDims.y + y, currentHashEntry.pos.z * blockDims.z + z, 1);
+                    }
+                }
+            }
+        }
+    }
+
+    template <class TVoxel>
+    __global__ void classifyVoxel_kernel(int size, float isoValue, uint *voxelVerts, uint *voxelOccupied,
+                                         const Vector4s *visibleBlockGlobalPos, const TVoxel *localVBA, const ITMHashEntry *hashTable, bool checkVoxelState) {
+        CUDA_1D_LOOP(i, size) {
+            classifyVoxel_shared(i, isoValue, voxelVerts,
+                                 voxelOccupied, visibleBlockGlobalPos, localVBA, hashTable, checkVoxelState);
+        }
+    }
+
+    template <class TVoxel>
+    __global__ void classifyVoxelLabel_kernel(int size, float isoValue, uint *voxelVerts, uint *voxelOccupied,
+                                              const Vector4s *visibleBlockGlobalPos, const TVoxel *localVBA, const ITMHashEntry *hashTable, bool checkVoxelState) {
+        CUDA_1D_LOOP(i, size) {
+            classifyVoxelLabel_shared(i, isoValue, voxelVerts,
+                                      voxelOccupied, visibleBlockGlobalPos, localVBA, hashTable, checkVoxelState);
+        }
+    }
+
+
+#if 0
+    template <class TVoxel>
+__global__ void classifyVoxel_kernel(int size, float isoValue, uint *voxelVerts, uint *voxelOccupied,
+                                     const TVoxel *localVBA, const SCFUSION::SCVoxelArrayInfo *arrayInfo) {
+    CUDA_1D_LOOP(i, size) {
+        short z = (short) floor(double(i / (arrayInfo->size.x * arrayInfo->size.y)));
+        short y = (short) floor(double((i - (z * arrayInfo->size.x * arrayInfo->size.y)) / arrayInfo->size.x));
+        short x = i - (z * arrayInfo->size.x * arrayInfo->size.y) - (y * arrayInfo->size.x);
+        classifyVoxel_shared(i, isoValue, voxelVerts, voxelOccupied, Vector4s(x,y,z,1), localVBA, arrayInfo);
+    }
+}
+#endif
+
+    template <SCFUSION::IntegrateType  T>
+    __global__ void classifyVoxel_kernel(int size, float isoValue, uint *voxelVerts, uint *voxelOccupied,
+                                         const float *localVBA, Vector3s dims) {
+        CUDA_1D_LOOP(i, size) {
+            short z = (short) floor(double(i / (dims.x * dims.y)));
+            short y = (short) floor(double((i - (z * dims.x * dims.y)) / dims.x));
+            short x = i - (z * dims.x * dims.y) - (y * dims.x);
+            classifyVoxel_shared<T>(i, isoValue, voxelVerts, voxelOccupied, Vector4s(x,y,z,1), localVBA, dims);
+        }
+    }
+
+    __global__ void BinaryCounter(int size, uint *voxelOccupied, int* counter){
+        CUDA_1D_LOOP(i,size) {
+            if(voxelOccupied[i] > 0) atomicAdd(counter,voxelOccupied[i]);
+        }
+    }
+
+    __global__ void compactVoxels_kernel(uint *compactedVoxelArray, uint *voxelOccupied, uint *voxelOccupiedScan, int size)
+    {
+        CUDA_1D_LOOP(i, size)
+        {
+            compactVoxels(i, compactedVoxelArray, voxelOccupied, voxelOccupiedScan, size);
+        }
+    }
+
+
+    template <class TVoxel>
+    __global__ void generateTriangle_device(int activeVoxels, ITMMesh::Triangle *triangles, ITMMesh::Normal *normals, ITMMesh::Color *colors,
+                                            const Vector4f *labelColorList, float factor, uint noMaxTriangles, float isoValue, uint *compactedVoxelArray,
+                                            uint *numVertsScanned, const Vector4s *visibleBlockGlobalPos, const TVoxel *localVBA, const ITMHashEntry *hashTable, bool checkVoxelState)
+    {
+        CUDA_1D_LOOP(i, activeVoxels)
+        {
+            generateTriangles(i,triangles,normals,colors,labelColorList, factor, noMaxTriangles, isoValue, compactedVoxelArray,
+                              numVertsScanned, visibleBlockGlobalPos, localVBA, hashTable, checkVoxelState);
+        }
+    }
+    template <class TVoxel>
+    __global__ void generateTriangleLabel_device(int activeVoxels, ITMMesh::Triangle *triangles, ITMMesh::Normal *normals, ITMMesh::Color *colors,
+                                                 const Vector4f *labelColorList, float factor, int noMaxTriangles, float isoValue, uint *compactedVoxelArray,
+                                                 uint *numVertsScanned, const Vector4s *visibleBlockGlobalPos, const TVoxel *localVBA, const ITMHashEntry *hashTable, bool checkVoxelState)
+    {
+        CUDA_1D_LOOP(i, activeVoxels)
+        {
+            generateTrianglesLabel(i,triangles,normals,colors,labelColorList, factor, noMaxTriangles, isoValue, compactedVoxelArray,
+                                   numVertsScanned, visibleBlockGlobalPos, localVBA, hashTable, checkVoxelState);
+        }
+    }
+#if 0
+    template <SCFUSION::IntegrateType T, class TVoxel>
+__global__ void generateTriangle_device(int activeVoxels, ITMMesh::Triangle *triangles, ITMMesh::Normal *normals, ITMMesh::Color *colors,
+                                        const Vector4f *labelColorList, float factor, int noMaxTriangles, float isoValue, uint *compactedVoxelArray,
+                                        uint *numVertsScanned, const TVoxel *localVBA, const SCFUSION::SCVoxelArrayInfo *arrayInfo)
+{
+    CUDA_1D_LOOP(i, activeVoxels)
+    {
+        generateTriangles<T>(i,triangles,normals,colors,labelColorList, factor, noMaxTriangles, isoValue, compactedVoxelArray,
+                             numVertsScanned, localVBA, arrayInfo);
+    }
+}
+#endif
+
+    template <SCFUSION::IntegrateType T>
+    __global__ void generateTriangle_device(int activeVoxels, ITMMesh::Triangle *triangles, ITMMesh::Normal *normals, ITMMesh::Color *colors,
+                                            const Vector4f *labelColorList, float factor, int noMaxTriangles, float isoValue, uint *compactedVoxelArray,
+                                            uint *numVertsScanned, const float *localVBA, Vector3f origin , Vector3s dims)
+    {
+        CUDA_1D_LOOP(i, activeVoxels)
+        {
+            generateTriangles<T>(i,triangles,normals,colors,labelColorList, factor, noMaxTriangles, isoValue, compactedVoxelArray,
+                                 numVertsScanned, localVBA, origin, dims);
+        }
+    }
+}
+
+
+
+
+static inline uint occupiedScan(const uint *voxelOccupied_data, const size_t &visibleBlockPos_size, uint *voxelOccupiedScan_data, cudaStream_t stream){
+    uint activeVoxels = 0;
+//    thrust::exclusive_scan(thrust::device_ptr<const unsigned int>(voxelOccupied_data),
+//                           thrust::device_ptr<const unsigned int>(voxelOccupied_data + visibleBlockPos_size),
+//                           thrust::device_ptr<unsigned int>(voxelOccupiedScan_data)
+//    );
+
+    ParallelScan::scan_device(voxelOccupiedScan_data,voxelOccupied_data,
+                              (int)visibleBlockPos_size, true, stream);
+    {
+        uint lastElement, lastScanElement;
+        ORcudaSafeCall(cudaMemcpyAsync((void *) &lastElement,
+                                       (void *)(voxelOccupied_data + visibleBlockPos_size-1),
+                                       sizeof(uint), cudaMemcpyDeviceToHost, stream));
+        ORcudaSafeCall(cudaMemcpyAsync((void *) &lastScanElement,
+                                       (void *)(voxelOccupiedScan_data + visibleBlockPos_size-1),
+                                       sizeof(uint), cudaMemcpyDeviceToHost, stream));
+        ORcudaSafeCall(cudaStreamSynchronize(stream));
+
+//        printf("lastElement, lastScanElement: %d %d\n", lastElement, lastScanElement);
+        activeVoxels = lastElement + lastScanElement;
+    }
+    return activeVoxels;
+}
+
+static inline uint vertScan(const uint *voxelVert_data, const size_t &visibleBlockPos_size, uint *voxelVertScan_data, cudaStream_t stream){
+//    thrust::exclusive_scan(thrust::device_ptr<const unsigned int>(voxelVert_data),
+//                           thrust::device_ptr<const unsigned int>(voxelVert_data + visibleBlockPos_size),
+//                           thrust::device_ptr<unsigned int>(voxelVertScan_data)
+//    );
+    ParallelScan::scan_device(voxelVertScan_data,voxelVert_data,
+                              (int)visibleBlockPos_size, true, stream);
+    uint totalVerts = 0;
+    {
+        uint lastElement, lastScanElement;
+        ORcudaSafeCall(cudaMemcpyAsync((void *) &lastElement,
+                                       (void *)(voxelVert_data + visibleBlockPos_size-1),
+                                       sizeof(uint), cudaMemcpyDeviceToHost, stream));
+        ORcudaSafeCall(cudaMemcpyAsync((void *) &lastScanElement,
+                                       (void *)(voxelVertScan_data + visibleBlockPos_size-1),
+                                       sizeof(uint), cudaMemcpyDeviceToHost, stream));
+        ORcudaSafeCall(cudaStreamSynchronize(stream));
+        totalVerts = lastElement + lastScanElement;
+    }
+    return totalVerts;
+}
+
+template<class TVoxel>
+ITMMeshingEngine_CUDA<TVoxel,ITMVoxelBlockHash>::ITMMeshingEngine_CUDA(const float &isoValue)
+:ITMMeshingEngine<TVoxel, ITMVoxelBlockHash>(isoValue)
+{   //use SDF_LOCAL_BLOCK_NUM rather than SDF_BUCKET_NUM because the maximum active voxel number is SDF_LOCAL_BLOCK_NUM.
+    bool allocateCPU = false;
+#ifndef NDEBUG
+    allocateCPU=true;
+#endif
+    visibleBlockGlobalPos.reset(new ORUtils::MemoryBlock<Vector4s>(visibleBlockPos_size, allocateCPU, true));
+    stream_ = 0;
+    voxelVert_.reset(new ORUtils::MemoryBlock<uint>(visibleBlockPos_size,allocateCPU,true));
+    voxelVertScan_.reset(new ORUtils::MemoryBlock<uint>(visibleBlockPos_size,allocateCPU,true));
+    voxelOccupied_.reset(new ORUtils::MemoryBlock<uint>(visibleBlockPos_size,allocateCPU,true));
+    voxelOccupiedScan_.reset(new ORUtils::MemoryBlock<uint>(visibleBlockPos_size,allocateCPU,true));
+    voxelVert_->Clear(0,true, stream_);
+    voxelVertScan_->Clear(0,true, stream_);
+    voxelOccupied_->Clear(0,true, stream_);
+    voxelOccupiedScan_->Clear(0,true, stream_);
+}
+
+template<class TVoxel>
+ITMMeshingEngine_CUDA<TVoxel,ITMVoxelBlockHash>::~ITMMeshingEngine_CUDA()= default;
+
+template<class TVoxel>
+void ITMMeshingEngine_CUDA<TVoxel,ITMVoxelBlockHash>::reset() {
+    voxelVert_->Clear(0,true, stream_);
+    voxelVertScan_->Clear(0,true, stream_);
+    voxelOccupied_->Clear(0,true, stream_);
+    voxelOccupiedScan_->Clear(0,true, stream_);
+    if(compactedVoxelArray_)compactedVoxelArray_->Clear(0,true,stream_);
+}
+#include <numeric>
+template<class TVoxel>
+void ITMMeshingEngine_CUDA<TVoxel, ITMVoxelBlockHash>::MeshScene(ITMMesh *mesh, const ITMScene<TVoxel, ITMVoxelBlockHash> *scene, bool checkVoxelState)
+{
+    //
+    /// Get Pointers and Variables
+    ITMMesh::Triangle *triangles = mesh->triangles->GetData(MEMORYDEVICE_CUDA);
+    ITMMesh::Normal *normals = nullptr;
+    ITMMesh::Color *colors = nullptr;
+    if(mesh->hasNormal) normals = mesh->normals->GetData(MEMORYDEVICE_CUDA);
+    if(mesh->hasColor)  colors  = mesh->colors->GetData(MEMORYDEVICE_CUDA);
+
+    uint *voxelVert_data = voxelVert_->GetData(MEMORYDEVICE_CUDA);
+    uint *voxelVertScan_data = voxelVertScan_->GetData(MEMORYDEVICE_CUDA);
+    uint *voxelOccupied_data = voxelOccupied_->GetData(MEMORYDEVICE_CUDA);
+    uint *voxelOccupiedScan_data = voxelOccupiedScan_->GetData(MEMORYDEVICE_CUDA);
+
+    uint noMaxTriangles = mesh->noMaxTriangles, noTotalEntries = scene->index->noTotalEntries;
+    const TVoxel *localVBA = scene->localVBA->GetVoxelBlocks();
+    const ITMHashEntry *hashTable = scene->index->GetEntries();
+    float factor = scene->sceneParams->voxelSize;
+
+    visibleBlockGlobalPos->Clear(0, true, stream_);
+    auto visibleBlockGlobalPos_device = visibleBlockGlobalPos->GetData(MEMORYDEVICE_CUDA);
+
+    /// identify used voxel blocks
+    {
+        // loop through all has entries: use noTotalEntries
+        findAllocateBlocks<-1><<<GET_1D_BLOCKS(noTotalEntries), threadPerBlock, 0, stream_>>>
+                (visibleBlockGlobalPos_device, hashTable, noTotalEntries, Vector3s(SDF_BLOCK_SIZE,SDF_BLOCK_SIZE,SDF_BLOCK_SIZE));
+        ORcudaKernelCheck;
+    }
+
+    /// Classify Voxel
+    {
+        // loop through all visibleBlockGlobalPos_device: use visibleBlockPos_size
+        classifyVoxel_kernel<TVoxel> <<< GET_1D_BLOCKS(visibleBlockPos_size), threadPerBlock, 0, stream_ >>>
+            (visibleBlockPos_size, isoValue_, voxelVert_data, voxelOccupied_data, visibleBlockGlobalPos_device, localVBA, hashTable, checkVoxelState);
+
+    }
+
+    cudaStreamSynchronize(stream_);
+
+    /// Occupied Scan
+    uint activeVoxels;
+    {
+        activeVoxels = occupiedScan(voxelOccupied_data, voxelOccupied_->dataSize, voxelOccupiedScan_data, stream_);
+        if(activeVoxels==0) return;
+        if(compactedVoxelArray_ == nullptr) compactedVoxelArray_.reset(new ORUtils::MemoryBlock<uint>(activeVoxels, false, true));
+        else compactedVoxelArray_->Resize(activeVoxels);
+    }
+
+    /// Vert Scan
+    uint totalVerts;
+    {
+        totalVerts = vertScan(voxelVert_data, visibleBlockPos_size, voxelVertScan_data, stream_);
+
+        if(totalVerts==0) return;
+        if(totalVerts > noMaxTriangles) {
+            printf("[MarchingCubes][WARNING] The number of vertices is greater than the maximum buffer size!\n Truncated"
+                   " to the maximum buffer size. Or HELP ME!!\n");
+            totalVerts = noMaxTriangles;
+        }
+    }
+
+    /// Generate Compact Array
+    auto compactedVoxelArray_data = compactedVoxelArray_->GetData(MEMORYDEVICE_CUDA);
+    {
+        compactVoxels_kernel <<< GET_1D_BLOCKS(visibleBlockPos_size, threadPerBlock), threadPerBlock, 0, stream_ >>>
+          (
+                  compactedVoxelArray_data, voxelOccupied_data, voxelOccupiedScan_data, visibleBlockPos_size
+          );
+        ORcudaSafeCall(cudaStreamSynchronize(stream_));
+    }
+
+    /// Generate Triangles
+    {
+        generateTriangle_device << <
+        GET_1D_BLOCKS(compactedVoxelArray_->dataSize, threadPerBlock), threadPerBlock, 0, stream_ >> >
+                                                                                          (compactedVoxelArray_->dataSize,
+                                                                                                  triangles,
+                                                                                                  normals,
+                                                                                                  colors,
+                                                                                                  labelColorPtr_,
+                                                                                                  factor,
+                                                                                                  noMaxTriangles,
+                                                                                                  isoValue_,
+                                                                                                  compactedVoxelArray_data,
+                                                                                                  voxelVertScan_data,
+                                                                                                  visibleBlockGlobalPos_device,
+                                                                                                  localVBA,
+                                                                                                  hashTable,
+                                                                                                  checkVoxelState
+                                                                                          );
+
+        ORcudaSafeCall(cudaStreamSynchronize(stream_));
+    }
+
+    mesh->noTotalTriangles = std::min<uint>(totalVerts, static_cast<uint>(noMaxTriangles));
+}
+
+template<class TVoxel>
+void ITMMeshingEngine_CUDA<TVoxel, ITMVoxelBlockHash>::MeshSceneLabel(ITMMesh *mesh, const ITMScene<TVoxel, ITMVoxelBlockHash> *scene, bool checkVoxelState)
+{
+    /// Get Pointers and Variables
+    ITMMesh::Triangle *triangles = mesh->triangles->GetData(MEMORYDEVICE_CUDA);
+    ITMMesh::Normal *normals = nullptr;
+    ITMMesh::Color *colors = nullptr;
+    if(mesh->hasNormal) normals = mesh->normals->GetData(MEMORYDEVICE_CUDA);
+    if(mesh->hasColor)  colors  = mesh->colors->GetData(MEMORYDEVICE_CUDA);
+
+    uint *voxelVert_data = voxelVert_->GetData(MEMORYDEVICE_CUDA);
+    uint *voxelVertScan_data = voxelVertScan_->GetData(MEMORYDEVICE_CUDA);
+    uint *voxelOccupied_data = voxelOccupied_->GetData(MEMORYDEVICE_CUDA);
+    uint *voxelOccupiedScan_data = voxelOccupiedScan_->GetData(MEMORYDEVICE_CUDA);
+
+    int noMaxTriangles = mesh->noMaxTriangles, noTotalEntries = scene->index->noTotalEntries;
+    const TVoxel *localVBA = scene->localVBA->GetVoxelBlocks();
+    const ITMHashEntry *hashTable = scene->index->GetEntries();
+    float factor = scene->sceneParams->voxelSize;
+
+    visibleBlockGlobalPos->Clear(0, true, stream_);
+    auto visibleBlockGlobalPos_device = visibleBlockGlobalPos->GetData(MEMORYDEVICE_CUDA);
+
+    /// identify used voxel blocks
+    {
+        // loop through all has entries: use noTotalEntries
+        findAllocateBlocks<-1><<<GET_1D_BLOCKS(noTotalEntries), threadPerBlock, 0, stream_>>>
+                                                                                   (visibleBlockGlobalPos_device, hashTable, noTotalEntries, Vector3s(SDF_BLOCK_SIZE,SDF_BLOCK_SIZE,SDF_BLOCK_SIZE));
+        ORcudaKernelCheck;
+    }
+
+    /// Classify Voxel
+    {
+        // loop through all visibleBlockGlobalPos_device: use visibleBlockPos_size
+        classifyVoxelLabel_kernel<TVoxel> <<< GET_1D_BLOCKS(visibleBlockPos_size), threadPerBlock, 0, stream_ >>>
+                                                                                                 (visibleBlockPos_size, isoValue_, voxelVert_data, voxelOccupied_data, visibleBlockGlobalPos_device, localVBA, hashTable, checkVoxelState);
+
+    }
+
+    cudaStreamSynchronize(stream_);
+
+    /// Occupied Scan
+    uint activeVoxels;
+    {
+        activeVoxels = occupiedScan(voxelOccupied_data, visibleBlockPos_size, voxelOccupiedScan_data, stream_);
+        if(activeVoxels==0) return;
+        if(compactedVoxelArray_ == nullptr) compactedVoxelArray_.reset(new ORUtils::MemoryBlock<uint>(activeVoxels, false, true));
+        else compactedVoxelArray_->Resize(activeVoxels);
+    }
+
+    /// Vert Scan
+    uint totalVerts;
+    {
+        totalVerts = vertScan(voxelVert_data, visibleBlockPos_size, voxelVertScan_data, stream_);
+        if(totalVerts==0) return;
+        if(totalVerts > (uint)noMaxTriangles) {
+            printf("[MarchingCubes][WARNING] The number of vertices is greater than the maximum buffer size!\n Truncated"
+                   " to the maximum buffer size. Or HELP ME!!\n");
+            totalVerts = (uint)noMaxTriangles;
+        }
+    }
+
+    /// Generate Compact Array
+    auto compactedVoxelArray_data = compactedVoxelArray_->GetData(MEMORYDEVICE_CUDA);
+    {
+        compactVoxels_kernel <<< GET_1D_BLOCKS(visibleBlockPos_size, threadPerBlock), threadPerBlock, 0, stream_ >>>
+         (compactedVoxelArray_data, voxelOccupied_data, voxelOccupiedScan_data, visibleBlockPos_size);
+        ORcudaSafeCall(cudaStreamSynchronize(stream_));
+    }
+
+    /// Generate Triangles
+    {
+        generateTriangleLabel_device << <
+        GET_1D_BLOCKS(compactedVoxelArray_->dataSize, threadPerBlock), threadPerBlock, 0, stream_ >> >
+                                                                                          (compactedVoxelArray_->dataSize,
+                                                                                                  triangles,
+                                                                                                  normals,
+                                                                                                  colors,
+                                                                                                  labelColorPtr_,
+                                                                                                  factor,
+                                                                                                  noMaxTriangles,
+                                                                                                  isoValue_,
+                                                                                                  compactedVoxelArray_data,
+                                                                                                  voxelVertScan_data,
+                                                                                                  visibleBlockGlobalPos_device,
+                                                                                                  localVBA,
+                                                                                                  hashTable,
+                                                                                                  checkVoxelState
+                                                                                          );
+
+        ORcudaSafeCall(cudaStreamSynchronize(stream_));
+    }
+
+    mesh->noTotalTriangles = std::min<uint>(totalVerts, static_cast<uint>(noMaxTriangles));
+}
+
+template <class TVoxel>
+void ITMMeshingEngine_CUDA<TVoxel, ITMVoxelBlockHash>::MeshScene(ITMMesh *mesh, const ORUtils::MemoryBlock<float> *data, const Vector3f &origin, const Vector3s &dims, float voxelSize){
+    /// Get Pointers and Variables
+    ITMMesh::Triangle *triangles = mesh->triangles->GetData(MEMORYDEVICE_CUDA);
+    ITMMesh::Normal *normals = nullptr;
+    ITMMesh::Color *colors = nullptr;
+    if(mesh->hasNormal) normals = mesh->normals->GetData(MEMORYDEVICE_CUDA);
+    if(mesh->hasColor)  colors  = mesh->colors->GetData(MEMORYDEVICE_CUDA);
+
+    uint *voxelVert_data = voxelVert_->GetData(MEMORYDEVICE_CUDA);
+    uint *voxelVertScan_data = voxelVertScan_->GetData(MEMORYDEVICE_CUDA);
+    uint *voxelOccupied_data = voxelOccupied_->GetData(MEMORYDEVICE_CUDA);
+    uint *voxelOccupiedScan_data = voxelOccupiedScan_->GetData(MEMORYDEVICE_CUDA);
+
+    int noMaxTriangles = mesh->noMaxTriangles;
+    const float *localVBA = data->GetData(MEMORYDEVICE_CUDA);
+    float factor = voxelSize;
+    int size_total = dims.x*dims.y*dims.z;
+
+//    float isoValue = 0;
+//    ORUtils::MemoryBlock<int> counter(1,true,true);
+//    mesh->triangles->Clear(0);
+//    mesh->normals->Clear(0);
+//    mesh->colors->Clear(0);
+//    voxelVert_->Clear(0,true, stream_);
+//    voxelVertScan_->Clear(0,true, stream_);
+//    voxelOccupied_->Clear(0,true, stream_);
+//    voxelOccupiedScan_->Clear(0,true, stream_);
+//    ORcudaSafeCall(cudaStreamSynchronize(stream_));
+
+    /// Classify Voxel
+    {
+        classifyVoxel_kernel<TVoxel::integrateType> <<< GET_1D_BLOCKS(size_total, threadPerBlock), threadPerBlock, 0, stream_ >>>
+           (size_total, isoValue_, voxelVert_data, voxelOccupied_data, localVBA, dims);
+    }
+
+    cudaStreamSynchronize(stream_);
+
+    /// Occupied Scan
+    uint activeVoxels;
+    {
+        activeVoxels = occupiedScan(voxelOccupied_data, visibleBlockPos_size, voxelOccupiedScan_data, stream_);
+        if(activeVoxels==0) return;
+        if(compactedVoxelArray_ == nullptr) compactedVoxelArray_.reset(new ORUtils::MemoryBlock<uint>(activeVoxels, false, true));
+        else compactedVoxelArray_->Resize(activeVoxels);
+    }
+    /// Vert Scan
+    uint totalTriangles;
+    {
+        totalTriangles = vertScan(voxelVert_data, visibleBlockPos_size, voxelVertScan_data, stream_);
+        if(totalTriangles == 0) return;
+        if(totalTriangles > (uint)noMaxTriangles) {
+            printf("[MarchingCubes][WARNING] The number of vertices is greater than the maximum buffer size!\n Truncated"
+                   " to the maximum buffer size. Or HELP ME!!\n");
+            totalTriangles = (uint)noMaxTriangles;
+        }
+    }
+//    ORcudaSafeCall(cudaStreamSynchronize(stream_));
+
+//    counter.Clear(0);
+//    BinaryCounter<<<GET_1D_BLOCKS(size_total,threadPerBlock), threadPerBlock, 0, stream_>>>(size_total, voxelOccupied_data, counter.GetData(MEMORYDEVICE_CUDA));
+//    counter.UpdateHostFromDevice();
+//    ORcudaSafeCall(cudaDeviceSynchronize());
+//    printf("Counter: %d\n", counter.GetData(MEMORYDEVICE_CPU)[0]);
+//    counter.Clear(0);
+//    BinaryCounter<<<GET_1D_BLOCKS(size_total,threadPerBlock), threadPerBlock, 0, stream_>>>(size_total, voxelVert_data, counter.GetData(MEMORYDEVICE_CUDA));
+//    counter.UpdateHostFromDevice();
+//    ORcudaSafeCall(cudaDeviceSynchronize());
+//    printf("Verts: %d\n", counter.GetData(MEMORYDEVICE_CPU)[0]);
+//    printf("activeVoxels: %d\n", activeVoxels);
+//    printf("totalTriangles: %d\n", totalTriangles);
+
+
+    /// Generate Compact Array
+    auto compactedVoxelArray_data = compactedVoxelArray_->GetData(MEMORYDEVICE_CUDA);
+    {
+        compactVoxels_kernel <<< GET_1D_BLOCKS(size_total, threadPerBlock), threadPerBlock, 0, stream_ >>>
+             (
+                     compactedVoxelArray_data, voxelOccupied_data, voxelOccupiedScan_data, visibleBlockPos_size
+             );
+        ORcudaSafeCall(cudaStreamSynchronize(stream_));
+    }
+
+//    compactedVoxelArray_->UpdateHostFromDevice();
+//    for(size_t i=0;i<compactedVoxelArray_->dataSize; ++i)
+//        printf("[%zu] compactVoxelArray: %d\n", i, compactedVoxelArray_->GetData(MEMORYDEVICE_CPU)[i]);
+
+    /// Generate Triangles
+    {
+        generateTriangle_device<TVoxel::integrateType> <<< GET_1D_BLOCKS(compactedVoxelArray_->dataSize, threadPerBlock), threadPerBlock, 0, stream_ >>>
+             (compactedVoxelArray_->dataSize,
+                     triangles,
+                     normals,
+                     colors,
+                     labelColorPtr_,
+                     factor,
+                     totalTriangles,
+                     isoValue_,
+                     compactedVoxelArray_data,
+                     voxelVertScan_data,
+                     localVBA,
+                     origin,
+                     dims
+             );
+
+        ORcudaSafeCall(cudaStreamSynchronize(stream_));
+    }
+
+    mesh->noTotalTriangles = std::min<uint>(totalTriangles, static_cast<uint>(noMaxTriangles));
+
+    if(false)
+    {
+        ORUtils::MemoryBlock<ITMLib::ITMMesh::Triangle> *cpu_triangles;
+        if (mesh->memoryType == MEMORYDEVICE_CUDA)
+        {
+            cpu_triangles = new ORUtils::MemoryBlock<ITMLib::ITMMesh::Triangle>(noMaxTriangles, MEMORYDEVICE_CPU);
+            cpu_triangles->SetFrom(mesh->triangles, ORUtils::MemoryBlock<ITMLib::ITMMesh::Triangle>::CUDA_TO_CPU);
+        } else {
+            cpu_triangles = mesh->triangles;
+        }
+        for(size_t i=0; i < cpu_triangles->dataSize; ++i){
+            if(cpu_triangles->GetData(MEMORYDEVICE_CPU)[i].p0.x)
+            printf("[%zu]1: %f %f %f; 2: %f %f %f; 3:%f %f %f\n", i,
+                    cpu_triangles->GetData(MEMORYDEVICE_CPU)[i].p0.x, cpu_triangles->GetData(MEMORYDEVICE_CPU)[i].p0.y,cpu_triangles->GetData(MEMORYDEVICE_CPU)[i].p0.z,
+                   cpu_triangles->GetData(MEMORYDEVICE_CPU)[i].p1.x, cpu_triangles->GetData(MEMORYDEVICE_CPU)[i].p1.y,cpu_triangles->GetData(MEMORYDEVICE_CPU)[i].p1.z,
+                   cpu_triangles->GetData(MEMORYDEVICE_CPU)[i].p2.x, cpu_triangles->GetData(MEMORYDEVICE_CPU)[i].p2.y,cpu_triangles->GetData(MEMORYDEVICE_CPU)[i].p2.z);
+        }
+    }
+}
+
+template<class TVoxel>
+ITMMeshingEngine_CUDA<TVoxel,ITMPlainVoxelArray>::ITMMeshingEngine_CUDA(const float &isoValue)
+        :ITMMeshingEngine<TVoxel, ITMPlainVoxelArray>(isoValue), stream_(0)
+{   //use SDF_LOCAL_BLOCK_NUM rather than SDF_BUCKET_NUM because the maximum active voxel number is SDF_LOCAL_BLOCK_NUM.
+    visibleBlockGlobalPos.reset(new ORUtils::MemoryBlock<Vector4s>(visibleBlockPos_size, false, true));
+    stream_ = 0;
+    voxelVert_.reset(new ORUtils::MemoryBlock<uint>(visibleBlockPos_size,false,true));
+    voxelVertScan_.reset(new ORUtils::MemoryBlock<uint>(visibleBlockPos_size,false,true));
+    voxelOccupied_.reset(new ORUtils::MemoryBlock<uint>(visibleBlockPos_size,false,true));
+    voxelOccupiedScan_.reset(new ORUtils::MemoryBlock<uint>(visibleBlockPos_size,false,true));
+}
+
+template<class TVoxel>
+ITMMeshingEngine_CUDA<TVoxel,ITMPlainVoxelArray>::~ITMMeshingEngine_CUDA() = default;
+
+#if 0
+template<class TVoxel>
+void ITMMeshingEngine_CUDA<TVoxel, ITMPlainVoxelArray>::MeshScene(ITMMesh *mesh, const ITMScene<TVoxel, ITMPlainVoxelArray> *scene)
+{}
+
+
+template<class TVoxel>
+ITMMeshingEngine_CUDA<TVoxel,SCFUSION::SCPlainVoxelArray>::ITMMeshingEngine_CUDA(const SCFUSION::IntegrateType &datatype, const float &isoValue)
+        :ITMMeshingEngine<TVoxel, SCFUSION::SCPlainVoxelArray>(datatype, isoValue), stream_(0)
+{   //use SDF_LOCAL_BLOCK_NUM rather than SDF_BUCKET_NUM because the maximum active voxel number is SDF_LOCAL_BLOCK_NUM.
+    stream_ = 0;
+    voxelVert_.reset(new ORUtils::MemoryBlock<uint>(visibleBlockPos_size,false,true));
+    voxelVertScan_.reset(new ORUtils::MemoryBlock<uint>(visibleBlockPos_size,false,true));
+    voxelOccupied_.reset(new ORUtils::MemoryBlock<uint>(visibleBlockPos_size,false,true));
+    voxelOccupiedScan_.reset(new ORUtils::MemoryBlock<uint>(visibleBlockPos_size,false,true));
+}
+
+template<class TVoxel>
+ITMMeshingEngine_CUDA<TVoxel,SCFUSION::SCPlainVoxelArray>::~ITMMeshingEngine_CUDA()
+{}
+
+
+template<class TVoxel>
+void ITMMeshingEngine_CUDA<TVoxel, SCFUSION::SCPlainVoxelArray>::MeshScene(ITMMesh *mesh, const ITMScene<TVoxel, SCFUSION::SCPlainVoxelArray> *scene)
+{
+    //TODO: test me
+    /// Get Pointers and Variables
+    ITMMesh::Triangle *triangles = mesh->triangles->GetData(MEMORYDEVICE_CUDA);
+    ITMMesh::Normal *normals = nullptr;
+    ITMMesh::Color *colors = nullptr;
+    if(mesh->hasNormal) normals = mesh->normals->GetData(MEMORYDEVICE_CUDA);
+    if(mesh->hasColor)  colors  = mesh->colors->GetData(MEMORYDEVICE_CUDA);
+
+    uint *voxelVert_data = voxelVert_->GetData(MEMORYDEVICE_CUDA);
+    uint *voxelVertScan_data = voxelVertScan_->GetData(MEMORYDEVICE_CUDA);
+    uint *voxelOccupied_data = voxelOccupied_->GetData(MEMORYDEVICE_CUDA);
+    uint *voxelOccupiedScan_data = voxelOccupiedScan_->GetData(MEMORYDEVICE_CUDA);
+
+    int noMaxTriangles = mesh->noMaxTriangles;
+    const TVoxel *localVBA = scene->localVBA->GetVoxelBlocks();
+    float factor = scene->sceneParams->voxelSize;
+    const SCFUSION::SCVoxelArrayInfo * arrayInfo = scene->index->getIndexData();
+
+    /// Classify Voxel
+    {
+        // loop through all visibleBlockGlobalPos_device: use visibleBlockPos_size
+        if(dataType_==SCFUSION::IntegrateType::IntegrateType_TSDF)
+            classifyVoxel_kernel<SCFUSION::IntegrateType_TSDF,TVoxel> <<< GET_1D_BLOCKS(visibleBlockPos_size), threadPerBlock, 0, stream_ >>>
+            (visibleBlockPos_size, isoValue_, voxelVert_data, voxelOccupied_data, localVBA, arrayInfo);
+        else if (dataType_==SCFUSION::IntegrateType::IntegrateType_OFusion)
+            classifyVoxel_kernel<SCFUSION::IntegrateType::IntegrateType_OFusion,TVoxel> <<< GET_1D_BLOCKS(visibleBlockPos_size), threadPerBlock, 0, stream_ >>>
+          (visibleBlockPos_size, isoValue_, voxelVert_data, voxelOccupied_data, localVBA, arrayInfo);
+    }
+
+    /// Occupied Scan
+    uint activeVoxels;
+    {
+        thrust::exclusive_scan(thrust::device_ptr<unsigned int>(voxelOccupied_data),
+                               thrust::device_ptr<unsigned int>(voxelOccupied_data + visibleBlockPos_size),
+                               thrust::device_ptr<unsigned int>(voxelOccupiedScan_data)
+        );
+
+        {
+            uint lastElement, lastScanElement;
+            ORcudaSafeCall(cudaMemcpyAsync((void *) &lastElement,
+                                           (void *)(voxelOccupied_data + visibleBlockPos_size-1),
+                                           sizeof(uint), cudaMemcpyDeviceToHost, stream_));
+            ORcudaSafeCall(cudaMemcpyAsync((void *) &lastScanElement,
+                                           (void *)(voxelOccupiedScan_data + visibleBlockPos_size-1),
+                                           sizeof(uint), cudaMemcpyDeviceToHost, stream_));
+            ORcudaSafeCall(cudaStreamSynchronize(stream_));
+
+            activeVoxels = lastElement + lastScanElement;
+        }
+        if(activeVoxels==0) return;
+        if(compactedVoxelArray_ == nullptr) compactedVoxelArray_.reset(new ORUtils::MemoryBlock<uint>(activeVoxels, true, true));
+        else compactedVoxelArray_->Resize(activeVoxels);
+    }
+
+    /// Vert Scan
+    uint totalVerts;
+    {
+        thrust::exclusive_scan(thrust::device_ptr<unsigned int>(voxelVert_data),
+                               thrust::device_ptr<unsigned int>(voxelVert_data + visibleBlockPos_size),
+                               thrust::device_ptr<unsigned int>(voxelVertScan_data)
+        );
+
+        {
+            uint lastElement, lastScanElement;
+            ORcudaSafeCall(cudaMemcpyAsync((void *) &lastElement,
+                                           (void *)(voxelVert_data + visibleBlockPos_size-1),
+                                           sizeof(uint), cudaMemcpyDeviceToHost, stream_));
+            ORcudaSafeCall(cudaMemcpyAsync((void *) &lastScanElement,
+                                           (void *)(voxelVertScan_data + visibleBlockPos_size-1),
+                                           sizeof(uint), cudaMemcpyDeviceToHost, stream_));
+            ORcudaSafeCall(cudaStreamSynchronize(stream_));
+            totalVerts = lastElement + lastScanElement;
+        }
+        if(totalVerts==0) return;
+//        totalVerts /= 3; // 3 points -> 1 triangle
+        if(totalVerts > (uint)noMaxTriangles) {
+            printf("[MarchingCubes][WARNING] The number of vertices is greater than the maximum buffer size!\n Truncated"
+                   " to the maximum buffer size. Or HELP ME!!\n");
+            totalVerts = (uint)noMaxTriangles;
+        }
+    }
+
+    /// Generate Compact Array
+    auto compactedVoxelArray_data = compactedVoxelArray_->GetData(MEMORYDEVICE_CUDA);
+    {
+        compactVoxels_kernel <<< GET_1D_BLOCKS(visibleBlockPos_size, threadPerBlock), threadPerBlock, 0, stream_ >>>
+             (
+                     compactedVoxelArray_data, voxelOccupied_data, voxelOccupiedScan_data, visibleBlockPos_size
+             );
+        ORcudaSafeCall(cudaStreamSynchronize(stream_));
+    }
+
+    /// Generate Triangles
+    {
+        switch (dataType_) {
+            case SCFUSION::IntegrateType_OFusion:{
+                generateTriangle_device<SCFUSION::IntegrateType_OFusion> <<< GET_1D_BLOCKS(compactedVoxelArray_->dataSize, threadPerBlock), threadPerBlock, 0, stream_ >>>
+                     (compactedVoxelArray_->dataSize,
+                             triangles,
+                             normals,
+                             colors,
+                             labelColorPtr_,
+                             factor,
+                             noMaxTriangles,
+                             isoValue_,
+                             compactedVoxelArray_data,
+                             voxelVertScan_data,
+                             localVBA,
+                             arrayInfo
+                     );
+                break;
+            }
+            case SCFUSION::IntegrateType_TSDF: {
+                generateTriangle_device<SCFUSION::IntegrateType_TSDF> <<< GET_1D_BLOCKS(compactedVoxelArray_->dataSize, threadPerBlock), threadPerBlock, 0, stream_ >>>
+                  (compactedVoxelArray_->dataSize,
+                          triangles,
+                          normals,
+                          colors,
+                          labelColorPtr_,
+                          factor,
+                          noMaxTriangles,
+                          isoValue_,
+                          compactedVoxelArray_data,
+                          voxelVertScan_data,
+                          localVBA,
+                          arrayInfo
+                  );
+                break;
+            }
+        }
+
+        ORcudaSafeCall(cudaStreamSynchronize(stream_));
+    }
+
+    mesh->noTotalTriangles = std::min<uint>(totalVerts, static_cast<uint>(noMaxTriangles));
+}
+#endif

@@ -1,0 +1,326 @@
+#include "SceneCompletionEngine_CUDA.h"
+#include "../Shared/SceneCompletion_Shared.h"
+#include "../../../Objects/Scene/ITMScene.h"
+#include "../../../Objects/Scene/ITMRepresentationAccess.h"
+#include "../../../Objects/Scene/DistanceField_shared.h"
+#include "../../../Utils/ITMCUDAUtils.h"
+#include "../../Reconstruction/CUDA/ITMSceneReconstructionEngine_CUDA.h"
+#include "../../../../ORUtils/Logging.h"
+namespace SCFUSION {
+
+    template<class TVoxel>
+    void SceneCompletionEngine_CUDA<TVoxel, ITMLib::ITMVoxelBlockHash>::ResetSCBuffer(SCBuffer *scBuffer) {
+        scBuffer->iBuffer->Clear(0, true, stream_);
+        scBuffer->oBuffer->Clear(0, true, stream_);
+        scBuffer->iBuffer_conf->Clear(0, true, stream_);
+        scBuffer->oBuffer_conf->Clear(0, true, stream_);
+        scBuffer->iMask->Clear(0, true, stream_);
+    }
+
+    template<class TVoxel>
+    SceneCompletionEngine_CUDA<TVoxel, ITMLib::ITMVoxelBlockHash>::SceneCompletionEngine_CUDA(
+            SceneCompletionMethod sceneCompletionMethod):
+            SceneCompletionEngine<TVoxel, ITMLib::ITMVoxelBlockHash>(sceneCompletionMethod), stream_(nullptr) {}
+
+    template<class TVoxel>
+    SceneCompletionEngine_CUDA<TVoxel, ITMLib::ITMVoxelBlockHash>::~SceneCompletionEngine_CUDA() = default;;
+
+    template<class TVoxel>
+    __global__ void DataPreProcessing(int size, const TVoxel *voxelData,
+                                      const typename ITMLib::ITMVoxelBlockHash::IndexData *voxelIndex,
+                                      Vector3f base, float oneOverVoxelSize, Vector3s dims, float *data,
+                                      SCFUSION::Policy::Integrate integrate,
+                                      SCFUSION::SceneCompletionMethod sceneCompletionMethod) {
+        CUDA_1D_LOOP(i, size) {
+            copyValueFromScene_shared<TVoxel>(i, voxelData, voxelIndex, base, oneOverVoxelSize, dims, data);
+//            if (sceneCompletionMethod == SCFusion::SceneCompletionMethod::SceneCompletionMethod_ForkNet) {
+//                switch (integrate) {
+//                    case Policy::Integrate_WEIGHTED:
+//                        convert2SC<TVoxel::integrateType, SCFusion::Policy::Integrate_WEIGHTED>::compute(data[i]);
+//                        break;
+//                    case Policy::Integrate_DIRECT:
+//                        convert2SC<TVoxel::integrateType, SCFusion::Policy::Integrate_DIRECT>::compute(data[i]);
+//                        break;
+//                }
+//            } else if (sceneCompletionMethod == SCFusion::SceneCompletionMethod::SceneCompletionMethod_SceneInpainting) {
+//                LogOddLikelihood2Occupancy(data[i]);
+//            }
+        }
+    }
+
+    template<class TVoxel>
+    __global__ void CriteriaCheck_device(int size, const TVoxel *voxelData,
+                                         const typename ITMLib::ITMVoxelBlockHash::IndexData *voxelIndex,
+                                         Vector3f base, float oneOverVoxelSize, Vector3s dims, float threshold, float time, bool *mask) {
+        CUDA_1D_LOOP(i, size) {
+            copyUpdateStateFromScene_shared<TVoxel>(i, voxelData, voxelIndex, base, oneOverVoxelSize, dims, threshold,time, mask);
+        }
+    }
+
+
+    template<class TVoxel>
+    __global__ void DataPreProcessing(int size, const TVoxel *voxelData,
+                                      const typename ITMLib::ITMVoxelBlockHash::IndexData *voxelIndex,
+                                      Vector3f base, float oneOverVoxelSize, Vector3s dims, float *data, bool *mask,
+                                      SCFUSION::Policy::Integrate integrate,
+                                      SCFUSION::SceneCompletionMethod sceneCompletionMethod) {
+        CUDA_1D_LOOP(i, size) {
+            copyValueFromScene_shared<TVoxel>(i, voxelData, voxelIndex, base, oneOverVoxelSize, dims, data, mask);
+
+            if (sceneCompletionMethod == SCFUSION::SceneCompletionMethod::SceneCompletionMethod_ForkNet) {
+//                switch (integrate) {
+//                    case Policy::Integrate_WEIGHTED:
+//                        convert2SC<TVoxel::integrateType, SCFusion::Policy::Integrate_WEIGHTED>::compute(data[i]);
+//                        break;
+//                    case Policy::Integrate_DIRECT:
+//                        convert2SC<TVoxel::integrateType, SCFusion::Policy::Integrate_DIRECT>::compute(data[i]);
+//                        break;
+//                }
+                LogOddLikelihood2Occupancy(data[i]);
+                data[i] = data[i] * 2.f - 1.f;
+                data[i] = MAX(MIN(1.f, data[i]), -1.f);
+            } else if (sceneCompletionMethod == SCFUSION::SceneCompletionMethod::SceneCompletionMethod_SceneInpainting) {
+                //if (mask[i])data[i] = 0;
+                LogOddLikelihood2Occupancy(data[i]);
+                data[i] = data[i] * 2.f - 1.f;
+                data[i] = MAX(MIN(1.f, data[i]), -1.f);
+            }
+
+        }
+    }
+
+    template<class TVoxel>
+    float SceneCompletionEngine_CUDA<TVoxel, ITMLib::ITMVoxelBlockHash>::CriteriaCheck(SCBuffer *scBuffer,
+                                                                                       const ITMLib::ITMScene<TVoxel, ITMLib::ITMVoxelBlockHash> *scene) {
+        float oneOverVoxelSize = 1.f / scene->sceneParams->voxelSize;
+        auto *iMask = scBuffer->iMask->GetData(MEMORYDEVICE_CUDA, false);
+        if (TVoxel::integrateType == SCFUSION::IntegrateType_TSDF) {
+//            throw std::runtime_error("not implemented.\n");
+            CriteriaCheck_device<TVoxel> << <
+            GET_1D_BLOCKS(scBuffer->volumeSize_, threadPerBlock), threadPerBlock, 0, stream_ >> >
+                                                                                     (scBuffer->volumeSize_, scene->localVBA->GetVoxelBlocks(), scene->index->getIndexData(),
+                                                                                             scBuffer->volumeBase_, oneOverVoxelSize, scBuffer->volumeDims_,
+                                                                                             scBuffer->scparams_->thTime, scBuffer->time, iMask);
+            scBuffer->iMask->UpdateHostFromDevice(1, stream_);
+        } else {
+            CriteriaCheck_device<TVoxel> << <
+            GET_1D_BLOCKS(scBuffer->volumeSize_, threadPerBlock), threadPerBlock, 0, stream_ >> >
+                                                                                     (scBuffer->volumeSize_, scene->localVBA->GetVoxelBlocks(), scene->index->getIndexData(),
+                                                                                             scBuffer->volumeBase_, oneOverVoxelSize, scBuffer->volumeDims_,
+                                                                                             scBuffer->scparams_->thTime, scBuffer->time, iMask);
+            scBuffer->iMask->UpdateHostFromDevice(1, stream_);
+        }
+        ORcudaSafeCall(cudaStreamSynchronize(stream_));
+
+        size_t counter = 0;
+        auto *iMask_cpu = scBuffer->iMask->GetDataConst(MEMORYDEVICE_CPU);
+        for (size_t i = 0; i < scBuffer->volumeSize_; ++i) {
+            if (iMask_cpu[i]) counter++;
+        }
+        float percentage = float(counter) / float(scBuffer->volumeSize_);
+        SCLOG(DEBUG) << "Update percentage: " << counter << "/" << scBuffer->volumeSize_ << "("
+        << (float(counter) / float(scBuffer->volumeSize_)) << ")";
+        return percentage;
+    }
+
+
+    template<class TVoxel>
+    void SceneCompletionEngine_CUDA<TVoxel, ITMLib::ITMVoxelBlockHash>::Extraction(SCBuffer *scBuffer,
+                                                                                   const ITMLib::ITMScene<TVoxel, ITMLib::ITMVoxelBlockHash> *scene) {
+        float oneOverVoxelSize = 1.f / scene->sceneParams->voxelSize;
+        auto *iBuffer = scBuffer->iBuffer->GetData(MEMORYDEVICE_CUDA, false);
+
+        if (TVoxel::integrateType == SCFUSION::IntegrateType_TSDF) {
+            SCLOG(DEBUG) << "Extraction from SCFusion::IntegrateType_TSDF";
+            DataPreProcessing<TVoxel> << <
+            GET_1D_BLOCKS(scBuffer->volumeSize_, threadPerBlock), threadPerBlock, 0, stream_ >> >
+                 (scBuffer->volumeSize_, scene->localVBA->GetVoxelBlocks(), scene->index->getIndexData(),
+                         scBuffer->volumeBase_, oneOverVoxelSize, scBuffer->volumeDims_,
+                         iBuffer, scene->sceneParams->integratePolicy,
+                         scBuffer->scparams_->sceneCompletionMethod);
+        } else {
+            auto *iMask = scBuffer->iMask->GetData(MEMORYDEVICE_CUDA, false);
+
+            DataPreProcessing<TVoxel> << <
+            GET_1D_BLOCKS(scBuffer->volumeSize_, threadPerBlock), threadPerBlock, 0, stream_ >> >
+                                                                                     (scBuffer->volumeSize_, scene->localVBA->GetVoxelBlocks(), scene->index->getIndexData(),
+                                                                                             scBuffer->volumeBase_, oneOverVoxelSize, scBuffer->volumeDims_,
+                                                                                             iBuffer, iMask,
+                                                                                             scene->sceneParams->integratePolicy, scBuffer->scparams_->sceneCompletionMethod);
+//            scBuffer->iBuffer_conf->UpdateHostFromDevice(1,stream_);
+            scBuffer->iMask->UpdateHostFromDevice(1, stream_);
+        }
+        scBuffer->iBuffer->UpdateHostFromDevice(1, stream_);
+        ORcudaSafeCall(cudaStreamSynchronize(stream_));
+        ORcudaKernelCheck;
+    }
+
+//    template<class TVoxel, class TIndex>
+//    __global__ void SCFusion(int size, TVoxel *voxelData, const typename TIndex::IndexData *voxelIndex,
+//                             Vector3s dim_from, Vector3f base, float oneOverVoxelSize, SCFusion::Policy::FuseTwo policyFuseTwo,
+//                             const LogOddLabels *label_conf, int maxW)
+//    {
+//        CUDA_1D_LOOP(i, size) {
+//            fuse2_shared<TVoxel, TIndex>(i, voxelData, voxelIndex, dim_from, base, oneOverVoxelSize, policyFuseTwo, label_conf, maxW);
+//        }
+//    }
+    template<class TVoxel, class TIndex>
+    __global__ void SCFusion(int size, TVoxel *voxelData, const typename TIndex::IndexData *voxelIndex,
+                             Vector3s dim_from, Vector3f base, float oneOverVoxelSize,
+                             SCFUSION::Policy::FuseTwo policyFuseTwo,
+                             Vector4f projParams_d, Matrix4f M_d,
+                             Vector2i imgSize,
+                             const float *labels, const float *label_confs, const bool *mask, int maxW, float time) {
+        CUDA_1D_LOOP(i, size) {
+            fuse2_shared<TVoxel, TIndex>(i, voxelData, voxelIndex, dim_from, base, oneOverVoxelSize, policyFuseTwo,
+                                         projParams_d, M_d, imgSize,
+                                         labels, label_confs, mask, maxW, time);
+        }
+    }
+
+
+//    template<class TVoxel, class TIndex>
+//    __global__ void LabelPropagation(int size, const TVoxel *voxelData, const typename TIndex::IndexData *voxelIndex,
+//                                     Vector3s dim_from, Vector3f base, float oneOverVoxelSize, LogOddLabels *label_conf, int radius){
+//        CUDA_1D_LOOP(i, size) {
+//            labelPropagation_shared<TVoxel,TIndex>(i,voxelData,voxelIndex,dim_from,base,oneOverVoxelSize,label_conf,radius);
+//        }
+//    }
+//
+//    template<class TVoxel, class TIndex>
+//    __global__ void AssignMaximumLikelyhoodLabel(int size, TVoxel *voxelData, const typename TIndex::IndexData *voxelIndex,
+//                                     Vector3s dim_from, Vector3f base, float oneOverVoxelSize, const LogOddLabels *label_conf){
+//        CUDA_1D_LOOP(i, size) {
+//            assignMaximumLikelihoodLabel_shared<TVoxel,TIndex, TVoxel::hasLabelInformation>::compute(i,voxelData,voxelIndex,dim_from,base,oneOverVoxelSize, label_conf);
+//        }
+//    }
+
+/**
+ * Given a unlabeled voxel, this function tyies to assign a label to a voxel by searching its neighbors.
+ * @tparam TVoxel
+ * @tparam TIndex
+ * @param size
+ * @param voxelData
+ * @param voxelIndex
+ * @param dim_from
+ * @param base
+ * @param oneOverVoxelSize
+ * @param radius how many neighbors to search
+ */
+    template<class TVoxel, class TIndex, int LabelNum>
+    __global__ void LabelPropagation_device(int size, TVoxel *voxelData, const typename TIndex::IndexData *voxelIndex,
+                                     Vector3s dim_from, Vector3f base, float oneOverVoxelSize, int radius) {
+        CUDA_1D_LOOP(i, size){
+            labelPropagation_shared<TVoxel,TIndex,LabelNum>(i,voxelData,voxelIndex,dim_from,base,oneOverVoxelSize,radius);
+        }
+    }
+
+    template<class TVoxel>
+    void SceneCompletionEngine_CUDA<TVoxel, ITMLib::ITMVoxelBlockHash>::Fusion(
+            ITMLib::ITMScene<TVoxel, ITMLib::ITMVoxelBlockHash> *scene, const SCBuffer *scBuffer) {
+        float oneOverVoxelSize = 1 / scBuffer->scparams_->voxelSize;
+        int volumeSize = scBuffer->volumeSize_;
+        TVoxel *voxelBlocks = scene->localVBA->GetVoxelBlocks();
+        const ITMHashEntry *index = scene->index->getIndexData();
+        const Vector3s &volumeDims = scBuffer->volumeDims_;
+        const Vector3f &volumeOrigin = scBuffer->volumeBase_;
+        const auto &imgSize = scBuffer->imgSize_;
+        const auto &projParam = scBuffer->projParams_;
+        const Matrix4f &viewPose = scBuffer->pose_;
+        Policy::FuseTwo fusionPolicy = scBuffer->scparams_->scfusionPolicy;
+
+        const auto *oBuffer_labels = scBuffer->oBuffer->GetDataConst(MEMORYDEVICE_CUDA);
+        const auto *oBuffer_confs = scBuffer->oBuffer_conf->GetDataConst(MEMORYDEVICE_CUDA);
+        const auto *iBuffer_masks =
+                scBuffer->scparams_->sceneCompletionMethod == SceneCompletionMethod_SceneInpainting ?
+                scBuffer->iMask->GetDataConst(MEMORYDEVICE_CUDA, false) : nullptr;
+        auto maxW = scene->sceneParams->maxW;
+
+
+        SCFusion<TVoxel, ITMLib::ITMVoxelBlockHash> << <
+        GET_1D_BLOCKS(scBuffer->volumeSize_, threadPerBlock), threadPerBlock, 0, stream_ >> > (
+                volumeSize, voxelBlocks, index, volumeDims, volumeOrigin, oneOverVoxelSize, fusionPolicy,
+                        projParam, viewPose, imgSize,
+                        oBuffer_labels, oBuffer_confs, iBuffer_masks, maxW, scBuffer->time);
+        ORcudaSafeCall(cudaStreamSynchronize(stream_));
+
+
+
+        int radius = 1;
+        //TODO: change label num to constant definition
+//        LabelPropagation_device<TVoxel,ITMLib::ITMVoxelBlockHash, 14> <<< GET_1D_BLOCKS(scBuffer->volumeSize_, threadPerBlock), threadPerBlock, 0, stream_ >>>
+//                (volumeSize, voxelBlocks, index, volumeDims, volumeOrigin, oneOverVoxelSize, radius);
+//        ORcudaSafeCall(cudaStreamSynchronize(stream_));
+        //FIXME: maybe change this to CRF?
+        /*
+        LabelPropagation<TVoxel,ITMLib::ITMVoxelBlockHash> <<< GET_1D_BLOCKS(scBuffer->volumeSize_, threadPerBlock), threadPerBlock, 0, stream_ >>>
+                (volumeSize, voxelBlocks, index, volumeDims, volumeOrigin, oneOverVoxelSize, oBufferConf_device, radius);
+        cudaStreamSynchronize(stream_);
+        AssignMaximumLikelyhoodLabel<TVoxel, ITMLib::ITMVoxelBlockHash> <<< GET_1D_BLOCKS(scBuffer->volumeSize_, threadPerBlock), threadPerBlock, 0, stream_ >>>
+                (volumeSize, voxelBlocks, index, volumeDims, volumeOrigin, oneOverVoxelSize, oBufferConf_device);
+        cudaStreamSynchronize(stream_);*/
+    }
+
+
+
+    template<class TVoxel>
+    __global__ void copyLabelAndConfidenceFromScene_device(int size, const TVoxel *voxelData,
+                                          const typename ITMLib::ITMVoxelBlockHash::IndexData *voxelIndex,
+                                          Vector3f base, float oneOverVoxelSize, Vector3s dims,
+                                          float *labels, float *confs, bool *masks)
+    {
+        CUDA_1D_LOOP(i, size) {
+            copyLabelAndConfidenceFromScene_shared(i,voxelData,voxelIndex,base,oneOverVoxelSize,dims,labels,confs,masks);
+        }
+    }
+
+    template<class TVoxel>
+    void SceneCompletionEngine_CUDA<TVoxel, ITMLib::ITMVoxelBlockHash>::ExtractLabelAndConfidnece(SCBuffer *scBuffer,
+                                                                                   const ITMLib::ITMScene<TVoxel, ITMLib::ITMVoxelBlockHash> *scene) {
+        float oneOverVoxelSize = 1.f / scene->sceneParams->voxelSize;
+        auto *iBuffer = scBuffer->iBuffer->GetData(MEMORYDEVICE_CUDA, false);
+        auto *iBufferConf = scBuffer->iBuffer_conf->GetData(MEMORYDEVICE_CUDA,false);
+        auto *iBufferMast = scBuffer->iMask->GetData(MEMORYDEVICE_CUDA,false);
+        copyLabelAndConfidenceFromScene_device<TVoxel> << <
+        GET_1D_BLOCKS(scBuffer->volumeSize_, threadPerBlock), threadPerBlock, 0, stream_ >> >
+             (scBuffer->volumeSize_, scene->localVBA->GetVoxelBlocks(), scene->index->getIndexData(),
+                     scBuffer->volumeBase_, oneOverVoxelSize, scBuffer->volumeDims_,
+                     iBuffer, iBufferConf, iBufferMast);
+        scBuffer->iBuffer->UpdateHostFromDevice(1, stream_);
+        scBuffer->iBuffer_conf->UpdateHostFromDevice(1, stream_);
+        scBuffer->iMask->UpdateHostFromDevice(1,stream_);
+        ORcudaSafeCall(cudaStreamSynchronize(stream_));
+    }
+
+    template<class TVoxel, class TIndex>
+    __global__ void copyLabelAndConfidenceToScene_device(int size, TVoxel *voxelData, const typename TIndex::IndexData *voxelIndex,
+                             Vector3s dim_from, Vector3f base, float oneOverVoxelSize,
+                             const float *labels, const float *label_confs, const bool *masks) {
+        CUDA_1D_LOOP(i, size) {
+            copyLabelAndConfidenceToScene_shared<TVoxel, TIndex>(i, voxelData, voxelIndex, dim_from, base, oneOverVoxelSize,
+                                         labels, label_confs,masks);
+        }
+    }
+
+    template<class TVoxel>
+    void SceneCompletionEngine_CUDA<TVoxel, ITMLib::ITMVoxelBlockHash>::FusionLabelAndConfidence(
+            ITMLib::ITMScene<TVoxel, ITMLib::ITMVoxelBlockHash> *scene, const SCBuffer *scBuffer) {
+        float oneOverVoxelSize = 1 / scBuffer->scparams_->voxelSize;
+        int volumeSize = scBuffer->volumeSize_;
+        TVoxel *voxelBlocks = scene->localVBA->GetVoxelBlocks();
+        const ITMHashEntry *index = scene->index->getIndexData();
+        const Vector3s &volumeDims = scBuffer->volumeDims_;
+        const Vector3f &volumeOrigin = scBuffer->volumeBase_;
+
+        auto *labels = scBuffer->iBuffer->GetDataConst(MEMORYDEVICE_CUDA);
+        auto *confs = scBuffer->iBuffer_conf->GetDataConst(MEMORYDEVICE_CUDA);
+        auto *masks = scBuffer->iMask->GetDataConst(MEMORYDEVICE_CUDA);
+
+
+        copyLabelAndConfidenceToScene_device<TVoxel, ITMLib::ITMVoxelBlockHash> << <
+        GET_1D_BLOCKS(scBuffer->volumeSize_, threadPerBlock), threadPerBlock, 0, stream_ >> > (
+                volumeSize, voxelBlocks, index, volumeDims, volumeOrigin, oneOverVoxelSize,
+                        labels, confs, masks);
+        ORcudaSafeCall(cudaStreamSynchronize(stream_));
+    }
+}

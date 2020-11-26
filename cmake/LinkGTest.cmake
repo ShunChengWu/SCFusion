@@ -1,0 +1,7 @@
+
+IF(GTEST_INCLUDE_DIR)
+  TARGET_INCLUDE_DIRECTORIES(${targetname} PUBLIC ${GTEST_INCLUDE_DIR})
+  TARGET_LINK_LIBRARIES(${targetname} PUBLIC ${GTEST_LIBRARY} PUBLIC ${GTEST_MAIN_LIBRARY} PUBLIC pthread)
+ELSEIF(GTEST_INCLUDE_DIR)
+  MESSAGE(WARNING "Trying to link GTest but the variables were not set. Did you forget to use UseGTest.cmake?")
+ENDIF(GTEST_INCLUDE_DIR)
