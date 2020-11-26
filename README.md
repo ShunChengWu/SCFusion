@@ -25,6 +25,7 @@ or build it from [source](https://github.com/pytorch/pytorch#from-source)
 
 `-DWITH_PYTORCH=True -DPYTORCH_PATH=/path/to/libtorch/` to enable pytorch support
 
+`-DWITH_GUI=ON` to build with GUI
 ```
 mkdir build; 
 cd build; 
@@ -42,27 +43,17 @@ Change `libSettings->scParams.pth_to_pb` in a config file to the this model.
 
 To reconstruct
 ```
-./exe_scfusion_OFusionRGB1Label /path/to/config/file  --useSC 1 --pthOut /pth/to/output/folder/
+./build/App/SCFusion/exe_scfusion_OFusionRGB1Label ./Configurations/Config_ScanNet_CRF.txt --useGTPose 2 --useSC 1 --pthOut /pth/to/output/folder/
+# or with GUI
+./build/App/SCFusion/exe_scfusion_gui_OFusionRGB1Label ./Configurations/Config_ScanNet_CRF.txt --useGTPose 2 --useSC 1 --pthOut /pth/to/output/folder/
+# useGTPose 0: no, 1: assist, 2: yes
 ```
 
 Get mesh
 ```
 ./exe_Map2Mesh_OFusionRGB1Label --pth_in /pth/to/output/folder/ --pth_out /pth/to/output_mesh/folder/
 ```
-
-
 Our system assumes floor-aligned reconstruction. We use a simple floor detection method on the first frame if no ground truth poses are given.
-
-### With GUI
-build with `-DWITH_GUI=ON`.  
-
-This will build a GUI with OpenGL and ImGUI. 
-
-Then run
-```
-./build/App/SCFusion/exe_scfusion_OFusionRGB1Label ./Configurations/Config_ScanNet_CRF.txt --useGTPose 2 --useSC 1
-# useGTPose 0: no, 1: assist, 2: yes
-```
 
 ## CompleteScanNet Data Generation
 Our dataset is built based on [ScanNet][scannet], [Scan2CAD][scan2cad] and [ShapeNetCore.v2][shapenet]. You will need
@@ -81,7 +72,7 @@ Our system uses a different coordinate system than ScanNet. The input ply files 
 align it to our system.
 
 It's also possible to use the original ScanNet coordinate system, but you will need to change 
-some codes accordingly. 
+some codes accordingly. We are working on that. 
 ```
 # Need to change the paths inside first
 cd scripts
