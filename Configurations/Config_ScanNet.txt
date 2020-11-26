@@ -33,7 +33,6 @@ libSettings->scParams.outputDims.data(): 1, 64, 64, 64,
 libSettings->scParams.inputTensorName: input_volume, 
 libSettings->scParams.outputTensorName: output_1,
 libSettings->scParams.pth_to_pb: /home/sc/research/scene_inpainting/checkpoints/SI_ScanNet_0614/SI_ScanNet_0614.pt
-#libSettings->scParams.pth_to_pb: /home/lolavision/SCSLAM/Models/SI_ScanNet_0614.pt,
 libSettings->scParams.pth_to_meta: , 
 libSettings->scParams.pth_to_ckpt: , 
 #
@@ -80,7 +79,7 @@ libSettings->trackerConfig: type=extended,levels=bbb,useDepth=1,useColour=1,colo
 #
 # InputParams #
 #
-# 0:INPUTTYPE_SCANNET, 1:INPUTTYPE_LIVE, 2:INPUTTYPE_IMAGESEQUENCE, 3:INPUTTYPE_TUM, 4:INPUTTYPE_ICL_NUIM
+# 0:INPUTTYPE_SCANNET, 1:INPUTTYPE_RIO, 2:INPUTTYPE_SCANNET_POSE
 inputParams->inputdatatype: 0, 
 inputParams->folder: /media/sc/space1/dataset/scannet/scans/scene0000_00/, 
 inputParams->cam_K: /home/sc/research/scslam/data/TestData/intrinsic.txt, , 

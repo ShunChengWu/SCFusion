@@ -1,7 +1,5 @@
 # SCFusion
-The code of SCFusion: Real-time Incremental Scene Reconstruction with Semantic Completion will be released soon. 
-
-https://arxiv.org/abs/2010.13662
+![teaser](https://github.com/ShunChengWu/SCFusion_Network/blob/main/img/landscape_teaser.png)
 
 **Authors**: [Shun-Cheng Wu][sc], [Keisuke Tateno][keisu], [Nassir Navab][nassir] and [Federico Tombari][fede]
 
@@ -10,8 +8,7 @@ https://arxiv.org/abs/2010.13662
 [nassir]:http://campar.in.tum.de/Main/NassirNavabCv
 [fede]:http://campar.in.tum.de/Main/FedericoTombari
 
-
-The implementation of the main library is implemented on [InfiniTAM](https://github.com/victorprad/InfiniTAM) for open source purpose. 
+This is an implementation of our [SCFusion](https://arxiv.org/abs/2010.13662) on [InfiniTAM](https://github.com/victorprad/InfiniTAM) for open source purpose. 
 
 
 ## Dependencies
