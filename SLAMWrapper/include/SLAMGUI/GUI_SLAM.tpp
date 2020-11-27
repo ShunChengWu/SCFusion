@@ -654,10 +654,6 @@ void SLAMGUI<SLAMType>::process_impl() {
         TOCK("[SLAMGUI][process_impl]2.UpdateImage");
     }
 
-// make sure we clear the framebuffer's content
-//glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-    glClearColor(0.2f, 0.2f, 0.2f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glm::vec4 lightColor(1.0, 1.0, 1.0, 1);
 
     glm::mat4 projection = glCam->projection_control_->projection_matrix();
@@ -871,9 +867,9 @@ void SLAMGUI<SLAMType>::recordImg() {
 //            cvColorImage.release();
 //
 //        }
-    cvColorImage.create(window_->runtimeHeight, window_->runtimeWidth, CV_8UC3);
+    cvColorImage.create(window_->runtimeHeight, window_->runtimeWidth, CV_8UC4);
     glReadBuffer( GL_FRONT );
-    glReadPixels(0, 0, window_->runtimeWidth, window_->runtimeHeight, GL_RGB, GL_UNSIGNED_BYTE,
+    glReadPixels(0, 0, window_->runtimeWidth, window_->runtimeHeight, GL_RGBA, GL_UNSIGNED_BYTE,
                  cvColorImage.data);
     cv::flip(cvColorImage, cvColorImage, 0);
 //    std::cout << cvColorImage << "\n";

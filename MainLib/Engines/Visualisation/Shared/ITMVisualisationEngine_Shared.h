@@ -525,6 +525,7 @@ _CPU_AND_GPU_CODE_ inline void drawShadedColor(DEVICEPTR(Vector4u) & dest, const
 _CPU_AND_GPU_CODE_ inline void drawShadedColor(DEVICEPTR(Vector4u) & dest, const THREADPTR(float) & angle, const THREADPTR(Vector4u) &color)
 {
     dest = (color.toFloat()*(0.5 * angle + 0.5f)).toUChar();
+    dest.a = 255;
 }
 
 _CPU_AND_GPU_CODE_ inline void drawPixelNormal(DEVICEPTR(Vector4u) & dest, const THREADPTR(Vector3f) & normal_obj)

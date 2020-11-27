@@ -14,12 +14,12 @@ This is an implementation of our [SCFusion](https://arxiv.org/abs/2010.13662) on
 ```
 apt-get update
 ```
-#####CMAKE
+##### CMAKE
 ```
 apt install python3-pip
 pip3 install cmake
 ```
-#####Eigen3
+##### Eigen3
 ```
 git clone https://github.com/eigenteam/eigen-git-mirror.git
 cd eigen-git-mirror; mkdir build;cd build;cmake ..; make install
@@ -180,3 +180,16 @@ python3 GenerateTrainingData_ScanNetScan2CAD_skip200.py
 
 ## Network 
 Please check the network repository: [SCFusion_Network](https://github.com/ShunChengWu/SCFusion_Network)
+
+
+## GUI Hot keys
+```
+k: record images.
+*: save pose
+/: back to the saved pose
+f: switch between pose view and camera view
+c: show/hide grid
+x: show/hide FPS
+a: step one frame
+s: continue
+```

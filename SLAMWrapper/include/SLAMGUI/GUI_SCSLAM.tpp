@@ -267,9 +267,6 @@ void SCSLAMGUI<SLAMType>::process_impl() {
         TOCK("[SLAMGUI][process_impl]2.UpdateImage");
     }
 
-    // make sure we clear the framebuffer's content
-    glClearColor(0.2f, 0.2f, 0.2f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glm::vec4 lightColor(1.0, 1.0, 1.0, 1);
 
     glm::mat4 projection = glCam->projection_control_->projection_matrix();
