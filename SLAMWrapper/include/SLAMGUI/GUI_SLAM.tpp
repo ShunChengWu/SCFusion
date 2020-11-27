@@ -57,8 +57,8 @@ template<class SLAMType>
 SLAMGUI<SLAMType>::SLAMGUI(SLAMWrapper<SLAMType> *slamWarpper, std::string outputPath_):
 GUI3D("SLAM", 1080, 720),
 outputPath(std::move(outputPath_)), slamWarpper_(slamWarpper) {
-    glCam->camera_control_ = std::make_unique<SC::ArcCameraContorl>();
-    reinterpret_cast<SC::ArcCameraContorl*>(glCam->camera_control_.get())->SetDistance(5.0);
+//    glCam->camera_control_ = std::make_unique<SC::ArcCameraContorl>();
+//    reinterpret_cast<SC::ArcCameraContorl*>(glCam->camera_control_.get())->SetDistance(5.0);
 
     slam_ = slamWarpper_->getSLAM();
     camDepthParam = slamWarpper_->getCalibParam()->intrinsics_d;
