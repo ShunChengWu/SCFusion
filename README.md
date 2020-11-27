@@ -14,12 +14,12 @@ This is an implementation of our [SCFusion](https://arxiv.org/abs/2010.13662) on
 ```
 apt-get update
 ```
-#####CMAKE
+##### CMAKE
 ```
 apt install python3-pip
 pip3 install cmake
 ```
-#####Eigen3
+##### Eigen3
 ```
 git clone https://github.com/eigenteam/eigen-git-mirror.git
 cd eigen-git-mirror; mkdir build;cd build;cmake ..; make install
