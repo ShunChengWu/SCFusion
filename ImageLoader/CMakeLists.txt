@@ -25,7 +25,7 @@ target_link_libraries(${targetname}
 		PUBLIC ${OpenCV_LIBS}
 )
 INCLUDE(LinkOpenCV)
-
+INCLUDE(LinkEigen3)
 target_include_directories(${targetname} PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 set_target_properties(${targetname} PROPERTIES LINKER_LANGUAGE CXX)
 set_target_properties(${targetname} PROPERTIES CXX_STANDARD 11)
