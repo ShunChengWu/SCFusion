@@ -88,13 +88,13 @@ The docker image has all the dependencies our method needs.
 ## Build
 On your system or withint docker:
 ```
-git clone https://github.com/ShunChengWu/SCFusion.git
+git clone --recurse-submodules https://github.com/ShunChengWu/SCFusion.git
 cd SCFusion; mkdir build; cd build; 
 
 #`-DBUILD_DATA_GENERATOR=True` to build data generator. 
 #`-DWITH_PYTORCH=True -DPYTORCH_PATH=/path/to/libtorch/` to enable pytorch support
 #`-DWITH_GUI=ON` to build with GUI
-cmake ..;
+cmake -DCMAKE_BUILD_TYPE=Release ..;
 make
 ```
 
