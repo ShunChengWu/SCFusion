@@ -180,3 +180,14 @@ python3 GenerateTrainingData_ScanNetScan2CAD_skip200.py
 
 ## Network 
 Please check the network repository: [SCFusion_Network](https://github.com/ShunChengWu/SCFusion_Network)
+
+
+```
+@INPROCEEDINGS{Wu2020,
+  author={Wu, Shun-Cheng and Tateno, Kesuke and Navab, Nassir and Tombari, Federico},
+  booktitle={2020 International Conference on 3D Vision (3DV)}, 
+  title={SCFusion: Real-time Incremental Scene Reconstruction with Semantic Completion}, 
+  year={2020},
+  pages={801-810},
+  doi={10.1109/3DV50981.2020.00090}}
+ ```
