@@ -182,6 +182,10 @@ python3 GenerateTrainingData_ScanNetScan2CAD_skip200.py
 Please check the network repository: [SCFusion_Network](https://github.com/ShunChengWu/SCFusion_Network)
 
 
+# Acknowledgement
+This work is supported by the German Research Foundation (DFG, project number 407378162) and the Bavarian State Ministry of Education, Science and the Arts in the framework of the Centre Digitisation Bavaria (ZD.B).
+
+
 ```
 @INPROCEEDINGS{Wu2020,
   author={Wu, Shun-Cheng and Tateno, Kesuke and Navab, Nassir and Tombari, Federico},
