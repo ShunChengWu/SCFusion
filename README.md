@@ -103,13 +103,8 @@ make
 Our system takes a configuration file. You can find an example file under Configurations folder.
 It also takes some command line arguments, you can find them by pass `--h` or in */SLAMWrapper/include/SLAMTools/Parser.hpp*.
 
-The trained model can be downloaded from [link](http://campar.in.tum.de/files/scfusion/SI_ScanNet_0614.pt).
-```
-mkdir Models;
-cd Models;
-wget http://campar.in.tum.de/files/scfusion/SI_ScanNet_0614.pt
-cd ../
-``` 
+The trained model can be downloaded from [link](https://drive.google.com/file/d/1wHkhsVllWq8Egv_2c8VU6Zi61yaYoDl7/view?usp=sharing).
+Put the downloaded model `SI_ScanNet_0614.pt` under Models folder.  
 Change `libSettings->scParams.pth_to_pb` in a config file to the this model. 
 
 To reconstruct
