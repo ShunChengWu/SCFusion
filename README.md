@@ -134,18 +134,21 @@ You will need to download the `*_vh_clean_2.labels.ply` and `*.sens` files.
 [shapenet]:https://www.shapenet.org/
 
 #### Ground Truth Generation
+<del>
 **Flip Clouds**
 
 Our system uses a different coordinate system than ScanNet. The input ply files must be flipped in order to correctly 
 align it to our system.
 
 It's also possible to use the original ScanNet coordinate system, but you will need to change 
-some codes accordingly. We are working on that. 
-```
-# Flip mesh
-cd scripts
-bash RUN_FLIP_SCANNET_MESH.sh # Need to change the paths inside  
+some codes accordingly. We are working on that.
 
+</del>
+
+**Update  `main 7886e87` **
+This is no longer needed. At least in the data generation. Haven't fully tested yet.
+
+```
 # Generate aligned poses
 cd ../build/App/extractPoseFromScanNet;
 ./exe_ExtractPoseFromScanNet --pth_in /pth/to/scannet/scans/ --pth_out /pth/to/output/pose_folder/
