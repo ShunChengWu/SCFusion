@@ -1,6 +1,6 @@
 #pragma once
 #include "../ITMMainEngine.h"
-#include "../../ORUtils/Matrix.h"
+#include <ORUtils/Matrix.h>
 #include "../../../FernRelocLib/include/FernRelocLib/Relocaliser.h"
 #include <future>
 #include <map>

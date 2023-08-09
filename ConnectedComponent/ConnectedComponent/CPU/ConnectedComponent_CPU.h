@@ -1,11 +1,11 @@
 #pragma once
 
-#include "../../../ORUtils/MemoryBlock.h"
 #include "../Interface/ConnectedComponent.h"
 #include "../Shared/ConnectedComponent_shared.h"
 #include <map>
 #include <CxxTools/thread_pool.hpp>
-#include "../../../ORUtils/Image.h"
+#include <ORUtils/MemoryBlock.h>
+#include <ORUtils/Image.h>
 
 #ifdef WITH_OPENCV
 #include <opencv2/core.hpp>

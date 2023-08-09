@@ -4,7 +4,7 @@
 
 #include <cassert>
 
-#include "../../../ORUtils/MemoryBlock.h"
+#include <ORUtils/MemoryBlock.h>
 #include "../../Utils/ITMSurfelSceneParams.h"
 
 namespace ITMLib

@@ -3,7 +3,7 @@
 #include "ITMDepthTracker_CUDA.h"
 #include "../../Utils/ITMCUDAUtils.h"
 #include "../Shared/ITMDepthTracker_Shared.h"
-#include "../../../ORUtils/CUDADefines.h"
+#include <ORUtils/CUDADefines.h>
 
 using namespace ITMLib;
 

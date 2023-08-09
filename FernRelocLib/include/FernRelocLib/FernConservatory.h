@@ -2,10 +2,10 @@
 
 #pragma once
 
-#include "../../ORUtils/PlatformIndependence.h"
-#include "../../ORUtils/MathUtils.h"
-#include "../../ORUtils/Vector.h"
-#include "../../ORUtils/Image.h"
+#include <ORUtils/PlatformIndependence.h>
+#include <ORUtils/MathUtils.h>
+#include <ORUtils/Vector.h>
+#include <ORUtils/Image.h>
 
 namespace FernRelocLib
 {

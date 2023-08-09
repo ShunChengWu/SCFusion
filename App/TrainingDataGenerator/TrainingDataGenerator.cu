@@ -1,5 +1,5 @@
 #include "TrainingDataGenerator.h"
-#include "../../ORUtils/Logging.h"
+#include <ORUtils/Logging.h>
 #include <thrust/device_vector.h>
 #include <thrust/scan.h>
 #include <Utils/ITMCUDAUtils.h>

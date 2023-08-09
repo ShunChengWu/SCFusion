@@ -2,12 +2,12 @@
 #include <CxxTools/PathTool.hpp>
 #include "GUI_SLAM.hpp"
 #include "gui_kernel.hpp"
-#include "../../../ORUtils/EigenHelper.h"
 #include <utility>
 //#include <Utilities/utils.hpp>
-#include "../../../ORUtils/LabelColorUtils.h"
+#include <ORUtils/LabelColorUtils.h>
+#include <ORUtils/EigenHelper.h>
+#include <ORUtils/Logging.h>
 #include <Engines/Meshing/MeshEngine.h>
-#include "../../../ORUtils/Logging.h"
 
 #ifdef WIN32 //For create/delete files
 #include <direct.h>

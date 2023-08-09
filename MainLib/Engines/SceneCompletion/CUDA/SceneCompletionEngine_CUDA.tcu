@@ -5,7 +5,7 @@
 #include "../../../Objects/Scene/DistanceField_shared.h"
 #include "../../../Utils/ITMCUDAUtils.h"
 #include "../../Reconstruction/CUDA/ITMSceneReconstructionEngine_CUDA.h"
-#include "../../../../ORUtils/Logging.h"
+#include <ORUtils/Logging.h>
 namespace SCFUSION {
 
     template<class TVoxel>

@@ -21,7 +21,7 @@ SET(headers
 
 INCLUDE(SetCUDALibTarget)
 target_link_libraries(${targetname}
-		PUBLIC CxxTools
+#		PUBLIC CxxTools
 		PUBLIC ${OpenCV_LIBS}
 )
 INCLUDE(LinkOpenCV)

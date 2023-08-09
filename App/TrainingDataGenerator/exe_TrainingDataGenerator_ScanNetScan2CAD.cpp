@@ -11,13 +11,13 @@
 //#include <cnpy/cnpy.h>
 #include "SLAMGUI/GUI_SLAM.tpp"
 #include <pcl/visualization/pcl_visualizer.h>
-#include "../../ORUtils/LabelColorUtils.h"
+#include <ORUtils/LabelColorUtils.h>
 
 #include "../../ConnectedComponent/ConnectedComponent/CPU/ConnectedComponent_CPU.h"
 #include "loadCloud2Array.hpp"
 #include <CxxTools/DataWorker.h>
 //#include <Utilities/BinvoxIO.hpp>
-#include "../../ORUtils/Image2cvMat.h"
+#include <ORUtils/Image2cvMat.h>
 
 #include "ScanNetScan2CADLoader.h"
 

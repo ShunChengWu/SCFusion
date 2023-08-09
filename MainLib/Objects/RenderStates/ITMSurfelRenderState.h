@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "../../../ORUtils/Image.h"
+#include <ORUtils/Image.h>
 #include "../../Utils/ITMMath.h"
 
 namespace ITMLib

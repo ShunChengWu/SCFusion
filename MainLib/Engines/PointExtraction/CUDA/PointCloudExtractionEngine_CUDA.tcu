@@ -1,5 +1,5 @@
 #include "PointCloudExtractionEngine_CUDA.h"
-#include "../../../../ORUtils/CUDADefines.h"
+#include <ORUtils/CUDADefines.h>
 #include "../../../Utils/ITMCUDAUtils.h"
 #include "../Shared/PointCloudExtraction_Shared.h"
 #include <thrust/device_vector.h>

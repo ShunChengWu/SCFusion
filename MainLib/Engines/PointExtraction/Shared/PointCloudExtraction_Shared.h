@@ -1,5 +1,5 @@
 #pragma once
-#include "../../../../ORUtils/HSVToRGB.h"
+#include <ORUtils/HSVToRGB.h>
 #include "../../../Objects/Scene/IntegratePolicies.h"
 #include "../../../Objects/Scene/ITMVoxelTypes.h"
 #include "../../../Objects/PointCloud/PointCloud.h"

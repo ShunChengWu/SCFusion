@@ -76,7 +76,7 @@ namespace pcl{
                     type = xyz;
                     break;
                 default:
-                    throw "intput type doesn't support";
+                    throw std::runtime_error("intput type doesn't support");
             }
             switch (type) {
                 case pcd:
@@ -162,7 +162,7 @@ namespace pcl{
                     type = xyz;
                     break;
                 default:
-                    throw "output type doesn't support";
+                    throw std::runtime_error("output type doesn't support");
             }
             switch (type) {
                 case pcd:

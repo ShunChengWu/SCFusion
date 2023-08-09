@@ -25,7 +25,10 @@ std::shared_ptr<DataBuffer> ScanNetScan2CadMesh_Loader::get_item(int idx) {
     auto scannetholder = mScanNetMeshLoader.GetMesh(idx);
     auto name  = scannetholder->name;
     auto scan2cadholder = mScan2CadLoader.GetMeshes(name);
-    if(scan2cadholder.empty())return nullptr;
+    if(scan2cadholder.empty()) {
+        SCLOG(INFO) << "Unable to load Scan2CAD info on scan name " << name;
+        return nullptr;
+    }
 
     std::shared_ptr<DataBuffer> dataBuffer(new DataBuffer());
 

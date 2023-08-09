@@ -5,8 +5,8 @@
 #include <random>
 #include "../../../Objects/Scene/ITMVoxelTypes.h"
 #include "../../../Utils/Exceptions.h"
-#include "../../../../ORUtils/MatrixOperation.h"
-#include "../../../../ORUtils/LabelColorUtils.h"
+#include <ORUtils/MatrixOperation.h>
+#include <ORUtils/LabelColorUtils.h>
 
 struct AllocationTempData_vis {
     int noAllocatedVoxelEntries;

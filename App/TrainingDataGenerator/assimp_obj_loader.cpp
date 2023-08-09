@@ -1,5 +1,5 @@
 #include "assimp_obj_loader.h"
-#include "../../ORUtils/Logging.h"
+#include <ORUtils/Logging.h>
 
 AssimpObjLoader::AssimpObjLoader(const std::string& objfileName, uint &instance_num,
                          std::string _wnid)

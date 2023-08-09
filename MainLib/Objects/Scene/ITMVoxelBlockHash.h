@@ -9,8 +9,8 @@
 #endif
 
 #include "../../Utils/ITMMath.h"
-#include "../../../ORUtils/MemoryBlock.h"
-#include "../../../ORUtils/MemoryBlockPersister.h"
+#include <ORUtils/MemoryBlock.h>
+#include <ORUtils/MemoryBlockPersister.h>
 
 /// Default Setup
 #if 0

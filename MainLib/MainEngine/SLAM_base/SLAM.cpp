@@ -1,5 +1,5 @@
 #include "SLAM.h"
-#include "../../../ORUtils/LogUtil.h"
+#include <ORUtils/LogUtil.h>
 //#include "../../../ORUtils/EigenHelper.h"
 
 #include "../../Engines/Visualisation/ITMVisualisationEngineFactory.h"
@@ -7,9 +7,9 @@
 #include <future>
 #include <thread>
 #include <chrono>
-#include "../../ORUtils/MatrixOperation.h"
-#include "../../ORUtils/FileUtils.h"
-#include "../../ORUtils/Logging.h"
+#include <ORUtils/MatrixOperation.h>
+#include <ORUtils/FileUtils.h>
+#include <ORUtils/Logging.h>
 
 
 using namespace SCFUSION;

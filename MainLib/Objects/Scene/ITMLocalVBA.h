@@ -1,8 +1,8 @@
 // Copyright 2014-2017 Oxford University Innovation Limited and the authors of InfiniTAM
 
 #pragma once
-#include "../../../ORUtils/MemoryBlock.h"
-#include "../../../ORUtils/MemoryBlockPersister.h"
+#include <ORUtils/MemoryBlock.h>
+#include <ORUtils/MemoryBlockPersister.h>
 
 namespace ITMLib
 {

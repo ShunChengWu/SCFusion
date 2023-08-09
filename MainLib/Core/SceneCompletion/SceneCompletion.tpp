@@ -1,6 +1,6 @@
 #include "SceneCompletion.h"
 #include "../../Engines/SceneCompletion/SceneCompletionEngineFactory.h"
-#include "../../../ORUtils/LogUtil.h"
+#include <ORUtils/LogUtil.h>
 #include <vector>
 //#include "../../../ORUtils/MatrixOperation.h"
 

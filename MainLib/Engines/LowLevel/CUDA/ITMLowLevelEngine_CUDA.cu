@@ -4,7 +4,7 @@
 
 #include "../Shared/ITMLowLevelEngine_Shared.h"
 #include "../../../Utils/ITMCUDAUtils.h"
-#include "../../../../ORUtils/CUDADefines.h"
+#include <ORUtils/CUDADefines.h>
 
 using namespace ITMLib;
 

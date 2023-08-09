@@ -3,7 +3,7 @@
 #pragma once
 
 #include <driver_types.h>
-#include "../../ORUtils/CUDADefines.h"
+#include <ORUtils/CUDADefines.h>
 
 #define CUDA_1D_LOOP(i, n)                       \
 for (int i = blockIdx.x * blockDim.x + threadIdx.x;     \

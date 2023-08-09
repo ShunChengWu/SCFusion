@@ -2,8 +2,8 @@
 
 #include <CxxTools/parser.hpp>
 //#include <Utilities/Exception.hpp>
-#include "../../ORUtils/FileIO.h"
-#include "../../ORUtils/Logging.h"
+#include <ORUtils/FileIO.h>
+#include <ORUtils/Logging.h>
 #include <ImageLoader/ImageLoader.hpp>
 #include "../../../MainLib/Utils/LibSettingsIO.h"
 

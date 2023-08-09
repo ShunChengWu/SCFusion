@@ -9,8 +9,8 @@
 #include "../../Objects/Tracking/ITMSceneHierarchyLevel.h"
 #include "../../Objects/Tracking/TrackerIterationType.h"
 
-#include "../../../ORUtils/HomkerMap.h"
-#include "../../../ORUtils/SVMClassifier.h"
+#include <ORUtils/HomkerMap.h>
+#include <ORUtils/SVMClassifier.h>
 
 namespace ITMLib
 {

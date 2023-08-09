@@ -33,7 +33,7 @@ INCLUDE(SetCUDAAppTarget)
 target_link_libraries(${targetname}
 #		PUBLIC GUI3D
 #		PRIVATE Utils
-		PRIVATE CxxTools
+#		PRIVATE CxxTools
 		PRIVATE ImageLoader
 		PUBLIC SLAM_Wrapper
 		PUBLIC SLAMBase_OFusion2Label
@@ -72,7 +72,7 @@ ADD_DEFINITIONS(-DPCL_ENABLE_SSE=OFF)
 INCLUDE(SetCUDAAppTarget)
 target_link_libraries(${targetname}
 		PUBLIC GUI
-		PRIVATE CxxTools
+#		PRIVATE CxxTools
 		PRIVATE ImageLoader
 		PUBLIC SLAM_Wrapper
 		PUBLIC SLAMBase_OFusion2Label

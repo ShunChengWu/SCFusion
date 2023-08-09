@@ -2,10 +2,10 @@
 #include "GUI_SCSLAM.hpp"
 #include "gui_kernel.hpp"
 //#include <Utilities/EigenHelper.h>
-#include "../../../ORUtils/EigenHelper.h"
+#include <ORUtils/EigenHelper.h>
 #include <utility>
 //#include <Utilities/utils.hpp>
-#include "../../../ORUtils/Logging.h"
+#include <ORUtils/Logging.h>
 #include "../../Files/Label_ScanNet.h"
 #include "../../Files//Label_NYU13.h"
 #include "../../Files/Label_SunCG11.h"

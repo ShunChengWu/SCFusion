@@ -1,6 +1,6 @@
 #ifdef COMPILE_WITH_PYTORCH
 #include "SceneInpainting.h"
-#include "../../../../ORUtils/LogUtil.h"
+#include <ORUtils/LogUtil.h>
 
 namespace SCFUSION {
 

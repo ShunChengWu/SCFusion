@@ -1,5 +1,5 @@
 #pragma once
-#include "../../ORUtils/Logging.h"
+#include <ORUtils/Logging.h>
 #include "Scan2CADAnnotionLoader.h"
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>

@@ -1,7 +1,7 @@
 #include "../CPU/ScanNet.hpp"
 #include <ImageLoader/ImageLoader.hpp>
-#include "../../ORUtils/EigenHelper.h"
-#include <CxxTools/PathTool.hpp>
+#include <ORUtils/EigenHelper.h>
+#include <ORUtils//PathTool.hpp>
 
 using namespace SCFUSION::IO;
 namespace {

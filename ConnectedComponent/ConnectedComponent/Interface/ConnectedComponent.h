@@ -1,7 +1,7 @@
 #pragma once
 #include "../Shared/disjointSet.h"
 #include <memory>
-#include "../../../ORUtils/Image.h"
+#include <ORUtils/Image.h>
 
 namespace SCFUSION {
     class ConnectedComponent {

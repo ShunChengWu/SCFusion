@@ -8,7 +8,7 @@
 #include <algorithm>
 #include "../Shared/ITMMeshingEngine_Shared.h"
 #include "../../../Utils/ITMCUDAUtils.h"
-#include "../../../../ORUtils/CUDADefines.h"
+#include <ORUtils/CUDADefines.h>
 
 #include "mattdean1/scan.h"
 

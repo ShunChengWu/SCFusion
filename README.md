@@ -54,6 +54,8 @@ assimp (for data generation).
 libTorch : You can download the pre-built version from Pytorch [website](https://pytorch.org/get-started/locally/)
 or build it from [source](https://github.com/pytorch/pytorch#from-source)
 
+e.g.
+https://download.pytorch.org/libtorch/cu117/libtorch-cxx11-abi-shared-with-deps-2.0.1%2Bcu117.zip
 
 ## Using docker
 If you have nvidia-docker2:

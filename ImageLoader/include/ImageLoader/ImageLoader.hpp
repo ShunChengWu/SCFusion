@@ -1,10 +1,12 @@
 #pragma once
-#include "../../ORUtils/Image.h"
-#include "../../ORUtils/Matrix.h"
+//#include "../../ORUtils/Image.h"
+//#include "../../ORUtils/Matrix.h"
+#include <ORUtils/Image.h>
+#include <ORUtils/Matrix.h>
 //#include <Utilities/defines.h>
 //#include <Utilities/helper_math.h>
 #include "../../MainLib//Objects/Camera/ITMIntrinsics.h"
-#include <CxxTools/PathTool.hpp>
+#include <ORUtils//PathTool.hpp>
 #include "../CPU/util.h"
 
 #include <opencv2/core.hpp>

@@ -5,13 +5,13 @@
 #include <string>
 #include <vector>
 #include <numeric>
-#include "../../../ORUtils/LogUtil.h"
 #include <CxxTools/PathTool.hpp>
 #include "../../../MainLib/Objects/Scene/ITMVoxelTypes.h"
 #include "../../../MainLib/ITMLibDefines.h"
 #include "../../../MainLib/Utils/ITMLibSettings.h"
 #include "../../../MainLib/Utils/LibSettingsIO.h"
-#include "../../../ORUtils/Logging.h"
+#include <ORUtils/Logging.h>
+#include <ORUtils/LogUtil.h>
 
 namespace SCFUSION {
     namespace EVALUATION {

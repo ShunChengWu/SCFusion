@@ -1,7 +1,7 @@
 #pragma once
 
 #include <stdlib.h>
-#include "../../../ORUtils/MemoryBlock.h"
+#include <ORUtils/MemoryBlock.h>
 namespace ITMLib {
     class VoxelIndex {
     public:

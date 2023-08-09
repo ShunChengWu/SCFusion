@@ -3,7 +3,7 @@
 #pragma once
 
 #include "ITMMath.h"
-#include "../../ORUtils/Image.h"
+#include <ORUtils/Image.h>
 
 typedef ORUtils::Image<bool> ITMBoolImage;
 typedef ORUtils::Image<float> ITMFloatImage;

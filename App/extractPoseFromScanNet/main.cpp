@@ -3,16 +3,18 @@ This program loads and extract pose information from ScanNet *.sens files
 */
 #include <ImageLoader/ImageLoader.hpp>
 #include <ImageLoader/ImageLoadFactory.h>
-#include <CxxTools/PathTool.hpp>
-#include <CxxTools/parser.hpp>
-#include "../../ORUtils/Logging.h"
+//#include <CxxTools/PathTool.hpp>
+#include <ORUtils/PathTool.hpp>
+#include <ORUtils/Parser.h>
+//#include <CxxTools/parser.hpp>
+//#include <ORUtils/Logging.h>
 struct Params{
-    std::string pth_scan,pth_out;
+    std::string pth_in,pth_out;
 };
 
 int ParseInputArguments(int argc, char**argv, Params&params){
     tools::Parser parser(argc,argv);
-    parser.addOption(pkgcname("pth_scan", &params.pth_scan),"path to scannet folder.", true);
+    parser.addOption(pkgcname("pth_in", &params.pth_in),"path to scannet folder.", true);
     parser.addOption(pkgcname("pth_out", &params.pth_out),"path to outpu folder.", true);
 
     if(parser.showMsg()<0){
@@ -33,7 +35,9 @@ int main(int argc, char **argv) {
     tools::PathTool::create_folder(params.pth_out);
 
     // get all scans
-    auto scans = tools::PathTool::get_files_in_folder(params.pth_scan);
+//    std::vector<std::string> scans;
+//    tools::PathTool::get_folders_include_name_recursively(params.pth_in,"scene",scans);
+    auto scans = tools::PathTool::get_files_in_folder(params.pth_in);
     std::unique_ptr<SCFUSION::IO::ImageLoader> imageLoader;
 
     ORUtils::Matrix4<float> pose;
@@ -44,7 +48,7 @@ int main(int argc, char **argv) {
 
         SCLOG(INFO) << "process scene: " << scan_name;
         imageLoader.reset(SCFUSION::ImageLoaderFactory::MakeImageLoader(SCFUSION::IO::InputDateType::INPUTTYPE_SCANNET,
-                                                                      params.pth_scan + "/" + scan_name));
+                                                                      params.pth_in + "/" + scan_name));
         imageLoader->Init();
         SCLOG(VERBOSE) << "Num of images: " << imageLoader->NumberOfImages();
         poses.clear();

@@ -9,7 +9,7 @@
 #include "PoseDatabase.h"
 #include "PixelUtils.h"
 
-#include "../../ORUtils/SE3Pose.h"
+#include <ORUtils/SE3Pose.h>
 
 namespace FernRelocLib
 {

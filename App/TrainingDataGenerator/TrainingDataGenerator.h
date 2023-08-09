@@ -2,7 +2,7 @@
 #include <memory>
 #include <cuda_runtime.h>
 #include <Utils/ITMMath.h>
-#include "../../ORUtils/MemoryBlock.h"
+#include <ORUtils/MemoryBlock.h>
 #include <Objects/Scene/ITMVoxelTypes.h>
 #include <Objects/Scene/ITMLocalVBA.h>
 #include <Objects/Scene/ITMVoxelBlockHash.h>

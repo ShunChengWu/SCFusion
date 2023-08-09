@@ -1,5 +1,5 @@
 #pragma once
-#include "../ORUtils/PlatformIndependence.h"
+#include <ORUtils/PlatformIndependence.h>
 #ifndef CUDA_VECTR_TYPES
 #define CUDA_VECTOR_TYPES
 

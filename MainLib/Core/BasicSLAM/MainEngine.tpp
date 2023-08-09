@@ -2,7 +2,7 @@
 //#include <Utilities/LogUtil.hpp>
 //#include <Utilities/EigenHelper.h>
 //#include <CxxTools/LogUtil.hpp>
-#include "../../../ORUtils/LogUtil.h"
+#include <ORUtils/LogUtil.h>
 #include "../../Engines/LowLevel/ITMLowLevelEngineFactory.h"
 #include "../../Engines/ViewBuilding/ITMViewBuilderFactory.h"
 #include "../../Engines/Visualisation/ITMVisualisationEngineFactory.h"
@@ -12,10 +12,10 @@
 #include <future>
 #include <thread>
 #include <chrono>
-#include "../../ORUtils/MatrixOperation.h"
-#include "../../ORUtils/LabelColorUtils.h"
-#include "../../ORUtils/FileUtils.h"
-#include "../../ORUtils/Logging.h"
+#include <ORUtils/MatrixOperation.h>
+#include <ORUtils/LabelColorUtils.h>
+#include <ORUtils/FileUtils.h>
+#include <ORUtils/Logging.h>
 #include <CxxTools/PathTool.hpp>
 
 using namespace SCFUSION;

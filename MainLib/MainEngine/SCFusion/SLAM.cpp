@@ -1,7 +1,5 @@
 #include "SLAM.h"
-#include "../../../ORUtils/LogUtil.h"
-//#include "../../../ORUtils/EigenHelper.h"
-#include "../../../ORUtils/Logging.h"
+
 //#include <Utilities/Exception.hpp>
 
 
@@ -17,10 +15,14 @@
 #include <future>
 #include <thread>
 #include <chrono>
-#include "../../ORUtils/MatrixOperation.h"
-#include "../../ORUtils/LabelColorUtils.h"
+
+#include <ORUtils/LogUtil.h>
+#include <ORUtils/Logging.h>
+#include <ORUtils/MatrixOperation.h>
+#include <ORUtils/LabelColorUtils.h>
+#include <ORUtils/PathTool.hpp>
 //#include <ORUtils/FileUtils.h>
-#include <CxxTools/PathTool.hpp>
+//#include <CxxTools/PathTool.hpp>
 
 using namespace SCFUSION;
 

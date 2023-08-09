@@ -10,7 +10,7 @@
 #include "../Shared/ITMVisualisationEngine_Shared.h"
 #include "../../Reconstruction/Shared/ITMSceneReconstructionEngine_Shared.h"
 #include "../../../Utils/ITMCUDAUtils.h"
-#include "../../../../ORUtils/HSVToRGB.h"
+#include <ORUtils/HSVToRGB.h>
 
 namespace ITMLib
 {

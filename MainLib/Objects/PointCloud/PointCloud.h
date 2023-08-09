@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../ORUtils/Image.h"
+#include <ORUtils/Image.h>
 #include "../../Objects/Scene/ITMVoxelBlockHash.h"
 #include <memory>
 namespace SCFUSION

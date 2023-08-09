@@ -1,8 +1,10 @@
 #pragma once
 #include "../include/ImageLoader/ImageLoader.hpp"
 #include "ScanNet/sensorData.h"
-#include "../../ORUtils/Image.h"
-#include "../../ORUtils/Matrix.h"
+#include <ORUtils/Image.h>
+#include <ORUtils/Matrix.h>
+//#include "../../ORUtils/Image.h"
+//#include "../../ORUtils/Matrix.h"
 //#include <Utilities/defines.h>
 //#include <Utilities/helper_math.h>
 

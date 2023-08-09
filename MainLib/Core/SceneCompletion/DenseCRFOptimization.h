@@ -1,7 +1,7 @@
 #pragma once
 #include "../../../DenseCRF/densecrf.h"
 #include <assert.h>
-#include "../../../ORUtils/Logging.h"
+#include <ORUtils/Logging.h>
 namespace SCFUSION {
 
     class DenseCRF3D_ : public DenseCRF {

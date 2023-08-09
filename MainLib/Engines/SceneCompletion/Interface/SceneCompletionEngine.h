@@ -3,7 +3,7 @@
 #include "../../../Objects/Scene/ITMVoxelBlockHash.h"
 #include "../../../Objects/Scene/ITMScene.h"
 #include "../../../Objects/SceneCompletion/SceneCompletionBuffer.h"
-#include "../../../../ORUtils/MemoryBlock.h"
+#include <ORUtils/MemoryBlock.h>
 #include <vector>
 //#include "SceneCompletion.h"
 

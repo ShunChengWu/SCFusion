@@ -12,8 +12,8 @@
 #include "ScanNetMeshLoader.h"
 #include "Scan2CADObjectLoader.h"
 
-#include "../../ORUtils/MemoryBlock.h"
-#include "../../ORUtils/Vector.h"
+#include <ORUtils/MemoryBlock.h>
+#include <ORUtils/Vector.h>
 #include "../../MeshVoxelizer/MeshVoxelizer.h"
 #include <CxxTools/DataWorker.h>
 #include "ScanNetScan2CAD_SceneToSkip.h"

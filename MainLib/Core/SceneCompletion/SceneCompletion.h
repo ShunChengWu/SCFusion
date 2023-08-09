@@ -16,7 +16,7 @@
 
 #include <queue>
 
-#include "../../../ORUtils/Logging.h"
+#include <ORUtils/Logging.h>
 
 namespace SCFUSION {
     struct SCQueue{

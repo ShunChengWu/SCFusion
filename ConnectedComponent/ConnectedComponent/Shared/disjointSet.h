@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../ORUtils/MemoryBlock.h"
+#include <ORUtils/MemoryBlock.h>
 namespace SCFUSION {
     class DisjointSet{
     public:

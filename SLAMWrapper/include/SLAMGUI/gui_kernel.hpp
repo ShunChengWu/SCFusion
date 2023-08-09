@@ -3,7 +3,7 @@
 #include <memory>
 //#include <Utilities/MemoryBlock.hpp>
 //#include <Utilities/Image.h>
-#include "../../../ORUtils/Image.h"
+#include <ORUtils/Image.h>
 #include "../../../MainLib/Objects/Scene/ITMVoxelTypes.h"
 
 void float2RGB(const ORUtils::Image<float> *depthImage, ORUtils::Image<ORUtils::Vector4<unsigned char>> *image, float nearPlane, float farPlane, cudaStream_t stream);

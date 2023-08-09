@@ -1,7 +1,7 @@
 // Copyright 2014-2017 Oxford University Innovation Limited and the authors of InfiniTAM
 
 #include "ITMColorTracker.h"
-#include "../../../ORUtils/Cholesky.h"
+#include <ORUtils/Cholesky.h>
 
 #include <math.h>
 

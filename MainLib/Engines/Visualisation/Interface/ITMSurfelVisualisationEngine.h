@@ -9,7 +9,7 @@
 #include "../../../Objects/Tracking/ITMTrackingState.h"
 #include "../../../Objects/Views/ITMView.h"
 #include "../../../Utils/ITMImageTypes.h"
-#include "../../../../ORUtils/SE3Pose.h"
+#include <ORUtils/SE3Pose.h>
 
 namespace ITMLib {
     /**

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../ORUtils/Matrix.h"
+#include <ORUtils/Matrix.h>
 #include "../../ITMLibDefines.h"
 #include "../../Objects/Scene/ITMScene.h"
 #include "../../Objects/Meshing/ITMMesh.h"

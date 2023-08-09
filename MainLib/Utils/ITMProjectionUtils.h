@@ -6,7 +6,7 @@
 #endif
 
 #include "ITMMath.h"
-#include "../../ORUtils/PlatformIndependence.h"
+#include <ORUtils/PlatformIndependence.h>
 
 template<typename T> _CPU_AND_GPU_CODE_ inline Vector2f project(const THREADPTR(ORUtils::Vector3<T>) &point_3d, const THREADPTR(Vector4f) &intrinsics)
 {

@@ -1,5 +1,6 @@
 #pragma once
-#include "../../../ORUtils/Logging.h"
+//#include "../../../ORUtils/Logging.h"
+#include <ORUtils/Logging.h>
 #include "../../CPU/ScanNetPose.hpp"
 
 #ifdef COMPILE_WITH_OPENCV

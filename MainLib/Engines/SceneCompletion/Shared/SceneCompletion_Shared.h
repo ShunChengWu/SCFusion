@@ -1,6 +1,6 @@
 #pragma once
-#include "../../../../ORUtils/PlatformIndependence.h"
-#include "../../../../ORUtils/MathUtils.h"
+#include <ORUtils/PlatformIndependence.h>
+#include <ORUtils/MathUtils.h>
 #include "../../../Objects/Scene/ITMRepresentationAccess.h"
 #include "../../../Utils/ITMMath.h"
 #include "../../../Objects/Scene/ITMVoxelTypes.h"

@@ -1,5 +1,5 @@
 #pragma once
-#include "../../../ORUtils/MemoryBlock.h"
+#include <ORUtils/MemoryBlock.h>
 #include "../../Utils/SceneCompletionParams.h"
 #include "../Scene/ITMScene.h"
 #include <memory>

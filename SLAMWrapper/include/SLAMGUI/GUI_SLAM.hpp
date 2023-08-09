@@ -1,6 +1,6 @@
 #pragma once
 #undef __AVX2__
-#include "../../../libGUI3D/libGUI3D/GUI3D.h"
+#include <GUI3D/GUI3D.h>
 #include <ImageLoader/ImageLoader.hpp>
 #include "../../../MainLib/Core/BasicSLAM/MainEngine.h"
 #include "../../../MainLib/Objects/Meshing/ITMMesh.h"
@@ -8,10 +8,9 @@
 #include <utility>
 #include "gui_kernel.hpp"
 #include "../SLAMTools/SLAMWrapper.h"
-#include "../../../libGUI3D/libGUI3D/ImageDrawer.h"
+#include <GUI3D/ImageDrawer.h>
 #include <ft2build.h>
 #include FT_FREETYPE_H
-
 
 
 namespace SCFUSION {

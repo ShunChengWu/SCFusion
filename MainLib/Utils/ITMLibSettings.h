@@ -5,7 +5,7 @@
 #include "ITMSceneParams.h"
 #include "ITMSurfelSceneParams.h"
 #include "SceneCompletionParams.h"
-#include "../../ORUtils/MemoryDeviceType.h"
+#include <ORUtils/MemoryDeviceType.h>
 
 
 
