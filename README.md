@@ -105,9 +105,11 @@ make
 Our system takes a configuration file. You can find an example file under Configurations folder.
 It also takes some command line arguments, you can find them by pass `--h` or in */SLAMWrapper/include/SLAMTools/Parser.hpp*.
 
-The trained model can be downloaded from [link](https://drive.google.com/file/d/1wHkhsVllWq8Egv_2c8VU6Zi61yaYoDl7/view?usp=sharing).
+The trained model can be downloaded [here][link_trained_model].
 Put the downloaded model `SI_ScanNet_0614.pt` under Models folder.  
-Change `libSettings->scParams.pth_to_pb` in a config file to the this model. 
+Change `libSettings->scParams.pth_to_pb` in a config file to where this file is stored. 
+
+[link_trained_model]: https://www.campar.in.tum.de/public_datasets/2020_3dv_wusc/SI_ScanNet_0614.pt
 
 To reconstruct
 ```
@@ -133,7 +135,11 @@ You will need to download the `*_vh_clean_2.labels.ply` and `*.sens` files.
 [scan2cad]:https://github.com/skanti/Scan2CAD
 [shapenet]:https://www.shapenet.org/
 
-#### Ground Truth Generation
+### Generate GT
+Generated ground truth is available at this [link][gtdata_link]. Please make sure you have agreed all the terms of use from [ScanNet][scannet], [Scan2CAD][scan2cad] and [ShapeNetCore.v2][shapenet].
+
+[gtdata_link]: https://www.campar.in.tum.de/public_datasets/2020_3dv_wusc/CompleteScanNet_GT.zip
+
 <del>
 **Flip Clouds**
 
@@ -145,7 +151,7 @@ some codes accordingly. We are working on that.
 
 </del>
 
-**Update  `main 7886e87` **
+**Update  `main 7886e87` **  
 This is no longer needed. At least in the data generation. Haven't fully tested yet.
 
 ```
@@ -154,7 +160,6 @@ cd ../build/App/extractPoseFromScanNet;
 ./exe_ExtractPoseFromScanNet --pth_in /pth/to/scannet/scans/ --pth_out /pth/to/output/pose_folder/
 ```
 
-##### Generate GT
 replace `--fill 1` to `--fill 0` if you want to generate not filled ground truth. 
 ```
 # Prepare ground truth
@@ -170,7 +175,7 @@ replace `--fill 1` to `--fill 0` if you want to generate not filled ground truth
  --labelNum 12
 ```
 
-#### Generate Training data
+### Generate Training data
 ```
 cd scripts
 # Need to change paths
